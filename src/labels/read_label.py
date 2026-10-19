@@ -1,6 +1,9 @@
 # pip install google-cloud-vision
 import sys
 from google.cloud import vision
+from read_label import read_label
+
+text = read_label("artifacts/clean_label.jpg")
 
 
 def read_label(path):
@@ -17,4 +20,6 @@ def read_label(path):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        sys.exit("Usage: python read_label.py <image_path>")
     print(read_label(sys.argv[1]))

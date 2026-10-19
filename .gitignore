@@ -1,0 +1,18 @@
+# Datasets and label photos
+data/
+wine labels/
+
+# Generated models and results
+artifacts/
+outputs/
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local credentials
+.env
+.env.*
+!.env.example
