@@ -1,9 +1,6 @@
 # pip install google-cloud-vision
 import sys
 from google.cloud import vision
-from read_label import read_label
-
-text = read_label("artifacts/clean_label.jpg")
 
 
 def read_label(path):

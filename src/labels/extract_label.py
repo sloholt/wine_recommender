@@ -25,6 +25,7 @@ import re
 import unicodedata
 from pathlib import Path
 from typing import Optional
+import argparse
 
 import anthropic
 from PIL import Image, ImageOps
