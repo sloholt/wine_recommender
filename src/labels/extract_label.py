@@ -34,6 +34,8 @@ from pydantic import BaseModel, Field, ValidationError
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-5-5")
 IMAGE_TYPES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 MAX_IMAGE_SIDE = 1568  # longest edge in pixels; larger photos are shrunk before sending
+DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in {"1", "true", "yes"}
+ARTIFACT_DIR = Path(os.environ.get("ARTIFACT_DIR", "artifacts"))
 
 
 # ---- The Label Record Shape (aka JSON format) --------------------------------
@@ -104,16 +106,15 @@ SAVE_TOOL = {
 
 
 # ---- Helpers ---------------------------------------------------------------------
-def run_ocr(path: Path) -> str:
+def run_ocr(path):
     try:
-        from src.labels.read_label import read_label  #  Cloud Vision script
-    except ImportError:
-        print("Note: read_label.py not found; sending the photo without OCR text.")
-        return ""
-    try:
+        from read_label import (
+            read_label,
+        )  # imported here so demo mode doesn't need google-cloud-vision
+
         return read_label(str(path))
-    except Exception as e:  # OCR failing leads to claude reading the photo
-        print(f"Note: OCR failed ({e}); sending the photo without OCR text.")
+    except Exception as e:
+        print(f"OCR failed ({e}); sending the photo without OCR text.")
         return ""
 
 
@@ -204,14 +205,28 @@ def strip_classification(appellation: Optional[str]) -> str:
     return " ".join(words)
 
 
+def _real_fix(entry: str) -> bool:
+    """Keep 'wrong -> right' only if it actually changes something: drops 'X -> X' and 'X -> null'."""
+    wrong, arrow, right = entry.partition("->")
+    wrong, right = wrong.strip(), right.strip()
+    return (
+        bool(arrow)
+        and bool(right)
+        and right.lower() not in {"null", "none"}
+        and norm(wrong) != norm(right)
+    )
+
+
 def enforce_printed_text(record: WineLabel, raw_text: str) -> list[str]:
     """Fix the record in place so it follows the rules, and return a list of changes made.
 
     1. Region: if Claude translated a printed region (e.g. 'Limarí Valley'), replace it with
        the printed form from the appellation ('Valle del Limarí').
+    0. ocr_corrections: drop no-op entries like "CONTROLEE -> CONTROLEE" or "97 -> null".
     2. inferred_fields: country, region and variety are listed only if their value is NOT
        printed on the label (checked against the OCR text and the fields read from the photo).
     """
+    record.ocr_corrections = [s for s in record.ocr_corrections if _real_fix(s)]
     changes = []
     printed = (
         " "
@@ -324,48 +339,90 @@ def extract(label_text: str, image_block: Optional[dict]) -> WineLabel:
     return WineLabel.model_validate(tool_call.input)
 
 
+# ---- Demo record and the main entry point --------------------------------------
+DEMO_LABEL = {
+    "producer": "Concha y Toro",
+    "wine_name": "Amelia",
+    "appellation": "D.O. Valle del Limarí",
+    "vineyard": "Quebrada Seca",
+    "classification": "D.O.",
+    "country": "Chile",
+    "region": "Valle del Limarí",
+    "variety": "Chardonnay",
+    "vintage": 2023,
+    "abv": None,
+    "volume_ml": 750,
+    "inferred_fields": ["country"],
+    "ocr_corrections": [],
+}
+
+HANDOFF_FIELDS = ("producer", "wine_name", "vintage", "region", "variety", "abv")
+
+
+def extract_label_from_photo(photo_path):
+    """Photo -> validated label dict. Used here and by the app in Step 8."""
+    if DEMO_MODE:
+        return dict(
+            DEMO_LABEL, code_corrections=[], warnings=[], raw_text="(demo mode)"
+        )
+    text = run_ocr(photo_path)
+    record = extract(text, encode_image(Path(photo_path)))
+    corrections = enforce_printed_text(record, text)
+    out = record.model_dump()
+    out.update(
+        code_corrections=corrections, warnings=check_record(record), raw_text=text
+    )
+    return out
+
+
+def to_label_record(extraction_output):
+    """Six-field handoff (plus country) for the matching/recommender sections."""
+    label_record = {key: extraction_output[key] for key in HANDOFF_FIELDS}
+    label_record["country"] = extraction_output.get("country")
+    return label_record
+
+
 # ---- Main ------------------------------------------------------------------------
-def main():
-    if len(sys.argv) != 2:
-        sys.exit("Usage: python extract_label.py <label image or text file>")
-
-    path = Path(sys.argv[1])
-    if not path.exists():
-        sys.exit(f"File not found: {path}")
-
-    if path.suffix.lower() in IMAGE_TYPES:
-        label_text = run_ocr(path)
-        image_block = encode_image(path)
-    else:
-        label_text = path.read_text(encoding="utf-8")
-        image_block = None
-        if not label_text.strip():
-            sys.exit("The text file is empty.")
-
-    try:
-        record = extract(label_text, image_block)
-    except ValidationError as e:
-        sys.exit(f"Claude returned data that doesn't match the schema:\n{e}")
-    except anthropic.APIError as e:
-        sys.exit(f"Anthropic API error: {e}")
-
-    corrections = enforce_printed_text(record, label_text)
-
-    output = record.model_dump()
-    output["code_corrections"] = (
-        corrections  # what the code changed in Claude's answer, for auditing
+def main(argv=None):
+    global DEMO_MODE
+    parser = argparse.ArgumentParser(
+        description="Extract a structured record from a wine label photo."
     )
-    output["warnings"] = check_record(record)
-    output["raw_text"] = label_text
+    parser.add_argument(
+        "image_path", type=Path, nargs="?", help="Label photo (not needed with --demo)"
+    )
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=ARTIFACT_DIR,
+        help="Where label_extraction.json is saved (default: artifacts)",
+    )
+    parser.add_argument(
+        "--demo", action="store_true", help="Use the saved example; no API calls"
+    )
+    args = parser.parse_args(argv)
 
-    out_path = path.with_suffix(".json")
-    out_path.write_text(
-        json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8"
+    DEMO_MODE = DEMO_MODE or args.demo
+    if not DEMO_MODE:
+        if args.image_path is None:
+            parser.error("image_path is required unless --demo is used")
+        if not args.image_path.exists():
+            parser.error(f"file not found: {args.image_path}")
+
+    extraction_output = extract_label_from_photo(args.image_path)
+    label_record = to_label_record(extraction_output)  # for the matching steps
+
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    output_path = args.out_dir / "label_extraction.json"
+    output_path.write_text(
+        json.dumps(extraction_output, indent=2, ensure_ascii=False),
+        encoding="utf-8",
     )
 
-    print(json.dumps(output, indent=2, ensure_ascii=False))
-    print(f"\nSaved to {out_path}")
+    print(json.dumps(extraction_output, indent=2, ensure_ascii=False))
+    print(f"\nSaved to {output_path}", file=sys.stderr)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
