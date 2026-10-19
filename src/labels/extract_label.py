@@ -106,7 +106,7 @@ SAVE_TOOL = {
 # ---- Helpers ---------------------------------------------------------------------
 def run_ocr(path: Path) -> str:
     try:
-        from read_label import read_label  #  Cloud Vision script
+        from src.labels.read_label import read_label  #  Cloud Vision script
     except ImportError:
         print("Note: read_label.py not found; sending the photo without OCR text.")
         return ""
