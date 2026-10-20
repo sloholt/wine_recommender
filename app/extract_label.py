@@ -109,7 +109,7 @@ SAVE_TOOL = {
 # ---- Helpers ---------------------------------------------------------------------
 def run_ocr(path):
     try:
-        from read_label import (
+        from app.ocr import (
             read_label,
         )  # imported here so demo mode doesn't need google-cloud-vision
 
@@ -311,9 +311,7 @@ def check_record(record: WineLabel) -> list[str]:
 
 def extract(label_text: str, image_block: Optional[dict]) -> WineLabel:
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        sys.exit(
-            "ANTHROPIC_API_KEY is not set. See the setup notes at the top of this file."
-        )
+        raise RuntimeError("ANTHROPIC_API_KEY is not set.")
 
     workspace_id = os.environ.get("ANTHROPIC_WORKSPACE_ID")
     headers = {"anthropic-workspace-id": workspace_id} if workspace_id else None
@@ -410,7 +408,13 @@ def main(argv=None):
         if not args.image_path.exists():
             parser.error(f"file not found: {args.image_path}")
 
-    extraction_output = extract_label_from_photo(args.image_path)
+        if DEMO_MODE:
+            extraction_output = extract_label_from_photo(None)
+        else:
+            from wine_app.image_preprocessing import clean_label
+
+            clean_path = clean_label(args.image_path, out_dir=args.out_dir)
+            extraction_output = extract_label_from_photo(clean_path)
     label_record = to_label_record(extraction_output)  # for the matching steps
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
