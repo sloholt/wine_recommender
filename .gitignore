@@ -1,18 +1,72 @@
-# Datasets and label photos
-data/
-wine labels/
 
-# Generated models and results
-artifacts/
-outputs/
-
-# Python cache and virtual environments
+# ==========================================
+# PYTHON
+# ==========================================
 __pycache__/
 *.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
 .venv/
 venv/
+env/
 
-# Local credentials
+# ==========================================
+# ENVIRONMENT VARIABLES & API CREDENTIALS
+# ==========================================
 .env
 .env.*
 !.env.example
+
+# ==========================================
+# SQLITE DATABASE
+# ==========================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ==========================================
+# RAW / SCRAPED WINE DATA
+# ==========================================
+data/raw/
+data/scraped/
+data/processed/
+
+# Keep directory structures if needed
+!data/raw/.gitkeep
+!data/scraped/.gitkeep
+!data/processed/.gitkeep
+
+# ==========================================
+# GENERATED ARTIFACTS
+# ==========================================
+artifacts/*.pkl
+artifacts/*.joblib
+artifacts/*.pickle
+artifacts/*.npy
+artifacts/*.npz
+
+# ==========================================
+# JUPYTER NOTEBOOKS
+# ==========================================
+.ipynb_checkpoints/
+
+# ==========================================
+# LOGS & TEMPORARY FILES
+# ==========================================
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# IDE SETTINGS
+# ==========================================
+.vscode/
+.idea/

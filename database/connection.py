@@ -1,58 +1,33 @@
 """
-SQLite database connection and session management.
+SQLite database connection management.
 """
 
+import sqlite3
 from pathlib import Path
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-# Project root (one directory above database/)
+# Project root
 BASE_DIR = Path(__file__).resolve().parents[1]
 
-# Database storage location
+# Database location
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 DATABASE_PATH = DATA_DIR / "wines.db"
-DATABASE_URL = f"sqlite:///{DATABASE_PATH.as_posix()}"
 
 
-# Initialize SQLite engine
-engine = create_engine(
-    DATABASE_URL,
-    echo=False,
-    connect_args={"timeout": 30},
-)
-
-
-# Enable foreign key constraints in SQLite
-@event.listens_for(engine, "connect")
-def enable_foreign_keys(dbapi_connection, connection_record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
-
-
-# Session factory
-SessionLocal = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    expire_on_commit=False,
-)
-
-
-# Base class for all database models
-class Base(DeclarativeBase):
-    pass
-
-
-def get_db():
+def get_connection():
     """
-    Yield a database session and close it afterward.
-    """
-    db = SessionLocal()
+    Create and return a SQLite database connection.
 
-    try:
-        yield db
-    finally:
-        db.close()
+    Foreign key enforcement is enabled for each connection.
+    """
+
+    conn = sqlite3.connect(DATABASE_PATH)
+
+    # Return rows as dictionary-like objects
+    conn.row_factory = sqlite3.Row
+
+    # Enable foreign key constraints
+    conn.execute("PRAGMA foreign_keys = ON")
+
+    return conn

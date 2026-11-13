@@ -1,38 +1,54 @@
 """
-Initialize the SQLite wine database.
+Initialize SQLite database using schema.sql.
 
-Run from the project root:
-
+Run:
     python -m database.initialize
 """
 
-from sqlalchemy import inspect
+import sqlite3
+from pathlib import Path
 
-from .connection import Base, engine, DATABASE_PATH
-from . import models  # Register models with SQLAlchemy
+from .connection import DATABASE_PATH, get_connection
+
+SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 
 
 def initialize_database():
     """
-    Create all database tables if they do not already exist.
+    Create database tables and indexes from schema.sql.
 
-    Existing tables and data are preserved.
+    Existing tables and records are preserved.
     """
 
+    if not SCHEMA_PATH.exists():
+        raise FileNotFoundError(f"Schema file not found: {SCHEMA_PATH}")
+
+    # Read SQL schema
+    schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
+
     print("\nInitializing Wine Database...")
+    print(f"Database location: {DATABASE_PATH}")
 
-    Base.metadata.create_all(bind=engine)
+    # Connect and execute schema
+    with get_connection() as conn:
+        conn.executescript(schema_sql)
 
-    inspector = inspect(engine)
-    tables = inspector.get_table_names()
+        # Retrieve created tables
+        tables = conn.execute("""
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+            """).fetchall()
 
-    print(f"\nDatabase location: {DATABASE_PATH}")
-    print("\nAvailable tables:")
+    print("\nDatabase tables:")
 
     for table in tables:
-        print(f"  - {table}")
+        print(f"  - {table['name']}")
 
-    print("\nWine database initialized successfully!")
+    print(f"\nTotal tables: {len(tables)}")
+    print("\nDatabase initialized successfully!")
 
 
 if __name__ == "__main__":

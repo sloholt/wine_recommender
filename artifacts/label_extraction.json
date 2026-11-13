@@ -1,0 +1,21 @@
+{
+  "producer": "Concha y Toro",
+  "wine_name": "Amelia",
+  "appellation": "D.O. Valle del Limarí",
+  "vineyard": "Quebrada Seca",
+  "classification": "D.O.",
+  "country": "Chile",
+  "region": "Valle del Limarí",
+  "variety": "Chardonnay",
+  "vintage": 2023,
+  "abv": null,
+  "volume_ml": 750,
+  "inferred_fields": [
+    "country"
+  ],
+  "ocr_corrections": [],
+  "code_corrections": [],
+  "warnings": [],
+  "raw_text": "(demo mode)",
+  "match_key": "concha y toro|amelia|chardonnay|limari|2023"
+}
