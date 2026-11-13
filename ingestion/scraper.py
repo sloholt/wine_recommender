@@ -9,6 +9,7 @@ Extracts:
     - Country
     - Region
     - Vintage
+    - Avg. Price (when shown)
     - Public tasting-note preview
     - Source URL
 
@@ -187,6 +188,51 @@ def parse_number(value, min_value, max_value):
     return None
 
 
+CURRENCY_SYMBOLS = {
+    "US$": "USD",
+    "$": "USD",
+    "€": "EUR",
+    "£": "GBP",
+    "¥": "JPY",
+    "HK$": "HKD",
+    "A$": "AUD",
+    "C$": "CAD",
+}
+
+
+def parse_price(value):
+    """
+    Parse an 'Avg. Price' value such as '$45', 'US$ 1,200', '€30' or '45 USD'.
+
+    Returns (price, currency) or (None, None). Requires a digit, so a missing
+    value that spills onto the next label line (e.g. 'Score') is ignored.
+    """
+
+    if not value:
+        return None, None
+
+    match = re.search(r"\d[\d,]*(?:\.\d+)?", value)
+
+    if not match:
+        return None, None
+
+    price = float(match.group().replace(",", ""))
+
+    currency = None
+    code = re.search(r"\b([A-Z]{3})\b", value)
+
+    if code:
+        currency = code.group(1)
+    else:
+        # Longest symbols first so 'US$' wins over '$'
+        for symbol in sorted(CURRENCY_SYMBOLS, key=len, reverse=True):
+            if symbol in value:
+                currency = CURRENCY_SYMBOLS[symbol]
+                break
+
+    return (int(price) if price.is_integer() else price), currency
+
+
 # WINE TITLE AND RANK
 
 
@@ -330,6 +376,9 @@ def parse_wine_card(block, source_url):
 
     tasting_note = extract_tasting_note(block)
 
+    # 'Avg. Price' badge (e.g. "$ 118") is inside the disclosure panel
+    price, currency = parse_price(extract_field(details_text, "Avg. Price"))
+
     return {
         "rank": rank,
         "title": title,
@@ -340,6 +389,8 @@ def parse_wine_card(block, source_url):
         "country": extract_field(details_text, "Country"),
         "region": extract_field(details_text, "Region"),
         "vintage": vintage or extract_vintage(title),
+        "price": price,
+        "currency": currency,
         "tasting_note": tasting_note,
         "tasting_note_truncated": (
             tasting_note is not None and tasting_note.endswith(("...", "…"))
