@@ -26,6 +26,8 @@ import unicodedata
 from pathlib import Path
 from typing import Optional
 import argparse
+from app.matching import match_key
+
 
 import anthropic
 from PIL import Image, ImageOps
@@ -39,7 +41,7 @@ DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in {"1", "true", "yes"}
 ARTIFACT_DIR = Path(os.environ.get("ARTIFACT_DIR", "artifacts"))
 
 
-# ---- The Label Record Shape (aka JSON format) --------------------------------
+# ---- The Label Record Shape (JSON format) --------------------------------
 class WineLabel(BaseModel):
     producer: Optional[str] = Field(
         None,
@@ -408,16 +410,25 @@ def main(argv=None):
         if not args.image_path.exists():
             parser.error(f"file not found: {args.image_path}")
 
-        if DEMO_MODE:
-            extraction_output = extract_label_from_photo(None)
-        else:
-            from wine_app.image_preprocessing import clean_label
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    if DEMO_MODE:
+        extraction_output = extract_label_from_photo(None)
+    else:
+        from app.image_preprocessing import preprocess_image
 
-            clean_path = clean_label(args.image_path, out_dir=args.out_dir)
-            extraction_output = extract_label_from_photo(clean_path)
+        clean_path = preprocess_image(
+            args.image_path, args.out_dir / f"{args.image_path.stem}_clean.jpg"
+        )
+        extraction_output = extract_label_from_photo(clean_path)
     label_record = to_label_record(extraction_output)  # for the matching steps
 
-    args.out_dir.mkdir(parents=True, exist_ok=True)
+    extraction_output["match_key"] = match_key(
+        extraction_output.get("producer"),
+        extraction_output.get("wine_name"),
+        extraction_output.get("variety"),
+        extraction_output.get("region"),
+        extraction_output.get("vintage"),
+    )
     output_path = args.out_dir / "label_extraction.json"
     output_path.write_text(
         json.dumps(extraction_output, indent=2, ensure_ascii=False),
