@@ -25,14 +25,13 @@ Run:
 import argparse
 import json
 import logging
-import re
 import random
 import time
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 import re
-
+import time
 
 import requests
 from bs4 import BeautifulSoup
@@ -44,6 +43,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (
     ElementClickInterceptedException,
     TimeoutException,
+    StaleElementReferenceException,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -68,10 +68,6 @@ def check_robots(url):
     """
     Check whether robots.txt permits crawling the URL.
     """
-
-    from urllib.parse import urlparse
-    from urllib.robotparser import RobotFileParser
-    import requests
 
     parsed = urlparse(url)
     robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
@@ -110,8 +106,6 @@ def fetch_html(url, use_selenium=False):
         raise PermissionError(f"Automated access not confirmed: {url}")
 
     if use_selenium:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
 
         options = Options()
         options.add_argument("--headless=new")
@@ -291,6 +285,22 @@ def extract_tasting_note(block):
 
 
 # PARSE INDIVIDUAL WINE
+# Is the element actually the topmost thing at its own center point?
+IS_UNCOVERED_JS = """
+const el = arguments[0];
+const r = el.getBoundingClientRect();
+const x = r.left + r.width / 2, y = r.top + r.height / 2;
+if (y < 0 || y > window.innerHeight) return false;
+const top = document.elementFromPoint(x, y);
+return top === el || el.contains(top);
+"""
+
+# Describe whatever is covering the element (for debugging)
+BLOCKER_JS = """
+const r = arguments[0].getBoundingClientRect();
+const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+return top ? top.outerHTML.slice(0, 200) : null;
+"""
 
 
 def expand_wine_cards(driver):
@@ -298,65 +308,43 @@ def expand_wine_cards(driver):
     Expand wine cards using their visible disclosure buttons.
     """
     wait = WebDriverWait(driver, 15)
+    short_wait = WebDriverWait(driver, 3)
 
-    cards = driver.find_elements(By.CSS_SELECTOR, WINE_CARD_SELECTOR)
+    count = len(driver.find_elements(By.CSS_SELECTOR, WINE_CARD_SELECTOR))
+    logger.info("Found %d wine cards to expand", count)
 
-    logger.info("Found %d wine cards to expand", len(cards))
+    for index in range(count):
 
-    for index in range(len(cards)):
+        # Always re-find: expanding a card re-renders the list
+        def get_button(d=driver):
+            cards = d.find_elements(By.CSS_SELECTOR, WINE_CARD_SELECTOR)
+            return cards[index].find_element(By.CSS_SELECTOR, "button")
 
-        # Re-find elements because expanding cards changes the layout
-        cards = driver.find_elements(By.CSS_SELECTOR, WINE_CARD_SELECTOR)
-
-        button = cards[index].find_element(By.CSS_SELECTOR, "button")
-
-        if button.get_attribute("aria-expanded") == "true":
+        if get_button().get_attribute("aria-expanded") == "true":
             continue
 
-        # Scroll using the same approach that fixed pagination
+        # Instant scroll, so the site's smooth scrolling can't leave it mid-animation
         driver.execute_script(
-            """
-            const button = arguments[0];
-            const rect = button.getBoundingClientRect();
-
-            window.scrollBy(
-                0,
-                rect.top - window.innerHeight / 2
-            );
-            """,
-            button,
+            "arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});",
+            get_button(),
         )
 
-        time.sleep(0.5)
+        try:
+            # Wait until nothing is covering the button, then click normally
+            short_wait.until(lambda d: d.execute_script(IS_UNCOVERED_JS, get_button(d)))
+            get_button().click()
 
-        # Re-find the button after scrolling
-        cards = driver.find_elements(By.CSS_SELECTOR, WINE_CARD_SELECTOR)
-
-        button = cards[index].find_element(By.CSS_SELECTOR, "button")
-
-        # Wait until the button is actually inside the viewport
-        wait.until(
-            lambda d: d.execute_script(
-                """
-                const r = arguments[0].getBoundingClientRect();
-                return r.top >= 0 &&
-                       r.bottom <= window.innerHeight;
-                """,
-                button,
+        except (TimeoutException, ElementClickInterceptedException):
+            blocker = driver.execute_script(BLOCKER_JS, get_button())
+            logger.warning(
+                "Card %d is covered by: %s -- using JS click", index + 1, blocker
             )
-        )
-
-        button.click()
+            driver.execute_script("arguments[0].click();", get_button())
 
         # Wait for the disclosure panel to open
-        wait.until(
-            lambda d: d.find_elements(By.CSS_SELECTOR, WINE_CARD_SELECTOR)[index]
-            .find_element(By.CSS_SELECTOR, "button")
-            .get_attribute("aria-expanded")
-            == "true"
-        )
+        wait.until(lambda d: get_button(d).get_attribute("aria-expanded") == "true")
 
-        logger.info("Expanded wine card %d/%d", index + 1, len(cards))
+        logger.info("Expanded wine card %d/%d", index + 1, count)
 
 
 def parse_wine_card(block, source_url):
@@ -498,7 +486,7 @@ def scrape_report(start_url, max_pages=5, use_selenium=True):
         return []
 
     options = Options()
-    # options.add_argument("--headless=new")
+    options.add_argument("--headless=new")
     options.add_argument("--window-size=1400,1000")
 
     driver = webdriver.Chrome(options=options)
