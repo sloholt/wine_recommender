@@ -13,7 +13,15 @@ What it does that is specific to this source:
 * sets ``varietal`` only when exactly one grape is known;
 * uses "<file name>#<rank>" as the source's external_id so re-imports are safe.
 
-It never invents a winery: these lists give none, so wineries stay NULL.
+* splits the published title into winery + wine name (core/naming.py, with the
+  hand-made fixes in data/reference/title_overrides.csv) and keeps the original
+  title as ``full_title``;
+* separates style (Sparkling / Dessert) from color (Red / White / Rosé), deriving a
+  missing color only by stated rules (Champagne -> White, "Rosé" in the title -> Rosé);
+* marks multi-vintage blends (no year + "N.26" / "171ème Edition" / note says
+  "blend of 2012, 2008 and 2007" / sparkling without a year) as non-vintage.
+
+A winery is only set when the title gives one; an unsplittable title is kept whole.
 """
 
 from __future__ import annotations
@@ -24,7 +32,15 @@ from pathlib import Path
 from typing import Iterator
 
 from ..core.models import Price, Rating, Source, WineRecord
-from ..core.normalize import clean_note, clean_text, clean_vintage, fold, to_float
+from ..core.naming import derive_color, is_non_vintage, load_overrides, split_wine_title
+from ..core.normalize import (
+    clean_note,
+    clean_text,
+    clean_vintage,
+    fold,
+    split_style_color,
+    to_float,
+)
 from ..core.tasting import parse_tasting_note
 
 LOG = logging.getLogger(__name__)
@@ -37,8 +53,14 @@ def _strip_vintage(title: str, vintage) -> str:
     return title
 
 
-def read_records(path) -> Iterator[WineRecord]:
+DEFAULT_OVERRIDES = (
+    Path(__file__).resolve().parents[2] / "data" / "reference" / "title_overrides.csv"
+)
+
+
+def read_records(path, overrides_path=None) -> Iterator[WineRecord]:
     path = Path(path)
+    overrides = load_overrides(overrides_path or DEFAULT_OVERRIDES)
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
         raise ValueError(f"{path.name}: expected a JSON list of wine objects")
@@ -62,6 +84,10 @@ def read_records(path) -> Iterator[WineRecord]:
             region = None
 
         note = clean_note(raw.get("tasting_note"))
+        parts = split_wine_title(title, region, overrides)
+        style, color = split_style_color(raw.get("color"))
+        color = derive_color(style, color, title, region)
+        non_vintage = is_non_vintage(vintage, title, style, note)
         info = parse_tasting_note(note, title)
         varietal = (
             info.grapes[0].name
@@ -99,13 +125,15 @@ def read_records(path) -> Iterator[WineRecord]:
             )
 
         yield WineRecord(
-            title=title,
-            winery=clean_text(raw.get("winery")),
+            name=parts.name,
+            full_title=clean_text(raw.get("title")),
+            winery=clean_text(raw.get("winery")) or parts.winery,
             country=country,
             region=region,
-            color=raw.get("color"),
+            style=style,
+            color=color,
             varietal=varietal,
-            vintages=[vintage] if vintage else [],
+            vintages=[vintage] if vintage else ([None] if non_vintage else []),
             grapes=info.grapes,
             aromas=info.aromas,
             sensory=info.sensory,

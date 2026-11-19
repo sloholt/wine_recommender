@@ -120,8 +120,10 @@ class Wine(Base):
     wine_id = Column(Integer, primary_key=True)
     winery_id = Column(Integer, ForeignKey("wineries.winery_id"))
     region_id = Column(Integer, ForeignKey("regions.region_id"))
-    title = Column(Text(collation="NOCASE"), nullable=False)
-    color = Column(Text)
+    name = Column(Text(collation="NOCASE"), nullable=False)
+    full_title = Column(Text)
+    style = Column(Text)  # Sparkling / Dessert / Fortified; NULL = still
+    color = Column(Text)  # Red / White / Rosé / Orange
     varietal = Column(Text)  # only when a single grape; see WineGrape otherwise
     abv = Column(REAL)
     closure = Column(Text)
@@ -160,7 +162,7 @@ class Wine(Base):
 Index(
     "ux_wines",
     func.coalesce(Wine.__table__.c.winery_id, 0),
-    Wine.__table__.c.title,
+    Wine.__table__.c.name,
     unique=True,
 )
 Index("ix_wines_region", Wine.__table__.c.region_id)

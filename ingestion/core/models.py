@@ -86,13 +86,15 @@ class Source:
 
 @dataclass
 class WineRecord:
-    title: str
+    name: str  # wine name only (no winery / region / vintage)
+    full_title: Optional[str] = None  # original published title
     winery: Optional[str] = None
     winery_website: Optional[str] = None
     country: Optional[str] = None
     country_iso: Optional[str] = None  # ISO 3166-1 alpha-2, if the source has it
     region: Optional[str] = None
-    color: Optional[str] = None
+    style: Optional[str] = None  # Sparkling / Dessert / Fortified
+    color: Optional[str] = None  # Red / White / Rosé / Orange
     varietal: Optional[str] = None  # only when a single grape; else use grapes
     abv: Optional[float] = None
     closure: Optional[str] = None

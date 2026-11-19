@@ -44,15 +44,17 @@ CREATE TABLE wines (
     wine_id   INTEGER PRIMARY KEY,
     winery_id INTEGER REFERENCES wineries(winery_id),
     region_id INTEGER REFERENCES regions(region_id),
-    title     TEXT NOT NULL COLLATE NOCASE,
-    color     TEXT,      -- Red / White / Rosé / Orange / Sparkling / Dessert ...
+    name       TEXT NOT NULL COLLATE NOCASE,  -- wine name without winery / region / vintage
+    full_title TEXT,                          -- original title as published, kept for display
+    style      TEXT,      -- Sparkling / Dessert / Fortified (NULL = still table wine)
+    color      TEXT,      -- Red / White / Rosé / Orange (independent of style)
     varietal  TEXT,      -- only when a single grape; otherwise see wine_grapes
     abv       REAL,
     closure   TEXT
 );
--- Identity = winery + title. (Rows with no known winery are not deduplicated by
+-- Identity = winery + name. (Rows with no known winery are not deduplicated by
 -- this index, because NULLs are distinct; the ingest code must handle that case.)
-CREATE UNIQUE INDEX ux_wines ON wines(COALESCE(winery_id, 0), title);
+CREATE UNIQUE INDEX ux_wines ON wines(COALESCE(winery_id, 0), name);
 CREATE INDEX ix_wines_region ON wines(region_id);
 CREATE INDEX ix_wines_color  ON wines(color);
 

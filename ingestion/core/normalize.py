@@ -6,7 +6,7 @@ Rules:
   for every source.
 * Provide small helpers adapters can reuse (parse_list, ordinal, to_float...).
 
-Run ``normalize_wine(record)`` -> cleaned copy, or None if the record has no title.
+Run ``normalize_wine(record)`` -> cleaned copy, or None if the record has no name.
 """
 
 from __future__ import annotations
@@ -203,18 +203,38 @@ COLORS = {
     "rosado": "Rosé",
     "rosato": "Rosé",
     "orange": "Orange",
+}
+# Style is separate from color: a sparkling wine is still white / rosé / red.
+STYLES = {
     "sparkling": "Sparkling",
     "dessert": "Dessert",
-    "dessert port": "Dessert/Port",
+    "dessert port": "Dessert",
+    "port": "Fortified",
     "fortified": "Fortified",
 }
 
 
 def normalize_color(value: Any) -> Optional[str]:
+    """Color only (Red/White/Rosé/Orange). Style words such as 'Sparkling' return None."""
     text = clean_text(value)
     if not text:
         return None
-    return COLORS.get(fold(text), text)
+    key = fold(text)
+    if key in STYLES:
+        return None
+    return COLORS.get(key, text)
+
+
+def normalize_style(value: Any) -> Optional[str]:
+    text = clean_text(value)
+    if not text:
+        return None
+    return STYLES.get(fold(text))
+
+
+def split_style_color(value: Any):
+    """'Sparkling' -> ('Sparkling', None); 'Red' -> (None, 'Red'); 'Dessert/Port' -> ('Dessert', None)."""
+    return normalize_style(value), normalize_color(value)
 
 
 COUNTRY_ALIASES = {
@@ -454,23 +474,23 @@ def _clean_aromas(aromas: Iterable[Aroma]) -> List[Aroma]:
 
 
 def normalize_wine(rec: WineRecord) -> Optional[WineRecord]:
-    """Return a cleaned copy of ``rec``, or None if it has no usable title.
+    """Return a cleaned copy of ``rec``, or None if it has no usable name.
 
-    If the record lists no vintages but the title starts or ends with a year
+    If the record lists no vintages but the name starts or ends with a year
     ('2019 Château X'), the year is stripped from the title and used as the
     vintage, including for any rating / price / source that has no vintage of
     its own. That way every year of a wine unifies into one ``wines`` row.
     """
-    title = clean_text(rec.title)
-    if not title:
+    name = clean_text(rec.name)
+    if not name:
         return None
 
     vintages = _clean_vintages(rec.vintages)
     inferred: Optional[int] = None
     if not vintages:
-        stripped, year = split_title_vintage(title)
+        stripped, year = split_title_vintage(name)
         if year is not None:
-            title, inferred, vintages = stripped, year, [year]
+            name, inferred, vintages = stripped, year, [year]
 
     country = normalize_country(rec.country)
     iso = normalize_iso(rec.country_iso) or iso_for_country(country)
@@ -481,12 +501,14 @@ def normalize_wine(rec: WineRecord) -> Optional[WineRecord]:
 
     return replace(
         rec,
-        title=title,
+        name=name,
+        full_title=clean_text(rec.full_title),
         winery=clean_text(rec.winery),
         winery_website=clean_text(rec.winery_website),
         country=country,
         country_iso=iso,
         region=clean_text(rec.region),
+        style=normalize_style(rec.style) or normalize_style(rec.color),
         color=normalize_color(rec.color),
         varietal=clean_text(rec.varietal),
         abv=to_float(rec.abv, 0, 100),

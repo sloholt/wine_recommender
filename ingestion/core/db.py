@@ -3,20 +3,20 @@
 Design:
 * get-or-create for countries, regions, wineries, wines and vintages, using
   in-memory lookup caches loaded once at startup (fast, no per-row SELECT storms).
-* Wine identity = winery + title (accent/case/punctuation-insensitive), with
+* Wine identity = winery + name (accent/case/punctuation-insensitive), with
   fallbacks when the winery is unknown on one side:
-    - record has a winery -> match winery + title; failing that, adopt an existing
-      wine with the same title and NO winery (and set its winery);
-    - record has no winery -> match the same title alone, but only if exactly one
+    - record has a winery -> match winery + name; failing that, adopt an existing
+      wine with the same name and NO winery (and set its winery);
+    - record has no winery -> match the same name alone, but only if exactly one
       wine has it, and only if country / color do not conflict. If several wines
-      share the title it is ambiguous, so a separate no-winery wine is created
+      share the name it is ambiguous, so a separate no-winery wine is created
       (a duplicate that can be merged later beats a wrong merge).
 * Re-running an import is safe: existing rows are matched, NULL fields are filled
   in, and ratings / prices are updated instead of duplicated.
 * If an insert fails, the current batch is rolled back and the caches reloaded,
   so the caches never point at rows that no longer exist.
 
-Name-only matching works when the normalized titles are identical. Titles that
+Name-only matching works when the normalized names are identical. Titles that
 differ ("Château Figeac" vs "Château Figeac St.-Emilion") are not matched.
 """
 
@@ -69,7 +69,7 @@ def _key(text: Optional[str]) -> str:
 class IngestStats:
     created: int = 0  # new wines
     matched: int = 0  # wines that already existed
-    skipped: int = 0  # records dropped by the normalizer (no title)
+    skipped: int = 0  # records dropped by the normalizer (no name)
 
     @property
     def total(self) -> int:
@@ -161,8 +161,8 @@ class WineDB:
 
         # title key -> {winery_id (0 = unknown): wine_id}
         self._wines: Dict[str, Dict[int, int]] = {}
-        for r in c.execute("SELECT wine_id, winery_id, title FROM wines"):
-            self._wines.setdefault(_key(r["title"]), {}).setdefault(
+        for r in c.execute("SELECT wine_id, winery_id, name FROM wines"):
+            self._wines.setdefault(_key(r["name"]), {}).setdefault(
                 r["winery_id"] or 0, r["wine_id"]
             )
 
@@ -287,7 +287,7 @@ class WineDB:
         region_id: Optional[int],
         country_id: Optional[int] = None,
     ) -> Tuple[int, bool]:
-        title_key = _key(rec.title)
+        title_key = _key(rec.name)
         by_winery = self._wines.setdefault(title_key, {})
         wine_id = by_winery.get(winery_id or 0)
 
@@ -309,13 +309,15 @@ class WineDB:
                     wine_id = candidate
             else:
                 LOG.warning(
-                    "Ambiguous title %r (%d wineries); not merging",
-                    rec.title,
+                    "Ambiguous wine name %r (%d wineries); not merging",
+                    rec.name,
                     len(by_winery),
                 )
 
         details = {
             "region_id": region_id,
+            "full_title": rec.full_title,
+            "style": rec.style,
             "color": rec.color,
             "varietal": rec.varietal,
             "abv": rec.abv,
@@ -325,7 +327,7 @@ class WineDB:
             self._fill("wines", "wine_id", wine_id, details)
             return wine_id, False
         wine_id = self._insert(
-            "wines", {"winery_id": winery_id, "title": rec.title, **details}
+            "wines", {"winery_id": winery_id, "name": rec.name, **details}
         )
         by_winery[winery_id or 0] = wine_id
         return wine_id, True
@@ -528,12 +530,12 @@ class WineDB:
         title = "?"
         try:
             for index, rec in enumerate(records, 1):
-                title = getattr(rec, "title", "?")
+                title = getattr(rec, "name", "?")
                 if normalize:
                     rec = normalize_wine(rec)
                 if rec is None:
                     stats.skipped += 1
-                    LOG.warning("Skipping record %d with no title", index)
+                    LOG.warning("Skipping record %d with no name", index)
                     continue
                 _, created = self.ingest(rec)
                 stats.created += int(created)
