@@ -1,289 +1,145 @@
-
--- ============================================================
--- WINE RECOMMENDER DATABASE SCHEMA
--- ============================================================
+-- Unified wine database schema (fresh start).
+-- Design: winery -> wine (the product) -> vintage (a specific year of that wine).
+-- Prices, critic scores and source rankings can attach to a vintage or, when
+-- vintage_id is NULL, to the wine as a whole (e.g. X-Wines aggregate ratings).
 
 PRAGMA foreign_keys = ON;
 
-
--- ============================================================
--- 1. COUNTRIES
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS countries (
+-- ---------------------------------------------------------------- geography
+CREATE TABLE countries (
     country_id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    iso_code TEXT UNIQUE
+    name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    iso_code   TEXT
 );
 
-
--- ============================================================
--- 2. REGIONS
--- Geographic hierarchy:
--- Country -> State/Province -> Wine Region -> Subregion
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS regions (
-    region_id INTEGER PRIMARY KEY,
-    country_id INTEGER NOT NULL,
-    parent_region_id INTEGER,
-    name TEXT NOT NULL,
-    region_type TEXT,
-
-    FOREIGN KEY (country_id)
-        REFERENCES countries(country_id),
-
-    FOREIGN KEY (parent_region_id)
-        REFERENCES regions(region_id),
-
-    CHECK (parent_region_id IS NULL
-           OR parent_region_id != region_id)
+CREATE TABLE regions (
+    region_id        INTEGER PRIMARY KEY,
+    country_id       INTEGER NOT NULL REFERENCES countries(country_id),
+    parent_region_id INTEGER REFERENCES regions(region_id),
+    name             TEXT NOT NULL COLLATE NOCASE,
+    region_type      TEXT
 );
+-- COALESCE so top-level regions (NULL parent) are still unique per country.
+CREATE UNIQUE INDEX ux_regions ON regions(country_id, COALESCE(parent_region_id, 0), name);
 
-
--- ============================================================
--- 3. REGION ALIASES
--- Alternative names used by different data sources
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS region_aliases (
-    alias_id INTEGER PRIMARY KEY,
-    region_id INTEGER NOT NULL,
-    alias TEXT NOT NULL,
-
-    FOREIGN KEY (region_id)
-        REFERENCES regions(region_id)
-        ON DELETE CASCADE,
-
+CREATE TABLE region_aliases (
+    alias_id  INTEGER PRIMARY KEY,
+    region_id INTEGER NOT NULL REFERENCES regions(region_id),
+    alias     TEXT NOT NULL COLLATE NOCASE,
     UNIQUE (region_id, alias)
 );
 
--- ============================================================
--- 4. WINES
--- Central wine table
--- Each wine/vintage combination is a separate record
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS wines (
-    wine_id INTEGER PRIMARY KEY,
-    region_id INTEGER,
-
-    title TEXT NOT NULL,
-    winery TEXT,
-    varietal TEXT,
-    vintage INTEGER,
-    closure TEXT,
-
-    FOREIGN KEY (region_id)
-        REFERENCES regions(region_id)
-        ON DELETE SET NULL,
-
-    CHECK (
-        vintage IS NULL
-        OR vintage BETWEEN 1800 AND 2100
-    ),
-
-    CHECK (
-        closure IS NULL
-        OR closure IN (
-            'Cork',
-            'Screw Cap',
-            'Synthetic Cork',
-            'Other'
-        )
-    )
+-- ------------------------------------------------------------------ wineries
+CREATE TABLE wineries (
+    winery_id INTEGER PRIMARY KEY,
+    name      TEXT NOT NULL COLLATE NOCASE,
+    region_id INTEGER REFERENCES regions(region_id),
+    website   TEXT
 );
+CREATE UNIQUE INDEX ux_wineries ON wineries(name, COALESCE(region_id, 0));
 
+-- --------------------------------------------------------------------- wines
+-- One row per wine (product), independent of year.
+CREATE TABLE wines (
+    wine_id   INTEGER PRIMARY KEY,
+    winery_id INTEGER REFERENCES wineries(winery_id),
+    region_id INTEGER REFERENCES regions(region_id),
+    title     TEXT NOT NULL COLLATE NOCASE,
+    color     TEXT,      -- Red / White / Rosé / Orange / Sparkling / Dessert ...
+    varietal  TEXT,      -- only when a single grape; otherwise see wine_grapes
+    abv       REAL,
+    closure   TEXT
+);
+-- Identity = winery + title. (Rows with no known winery are not deduplicated by
+-- this index, because NULLs are distinct; the ingest code must handle that case.)
+CREATE UNIQUE INDEX ux_wines ON wines(COALESCE(winery_id, 0), title);
+CREATE INDEX ix_wines_region ON wines(region_id);
+CREATE INDEX ix_wines_color  ON wines(color);
 
--- ============================================================
--- 5. WINE GRAPES
--- Stores grape varieties and blend percentages
--- ============================================================
+-- One row per wine + year. vintage NULL = non-vintage (N.V.).
+CREATE TABLE wine_vintages (
+    vintage_id INTEGER PRIMARY KEY,
+    wine_id    INTEGER NOT NULL REFERENCES wines(wine_id),
+    vintage    INTEGER
+);
+CREATE UNIQUE INDEX ux_wine_vintages ON wine_vintages(wine_id, COALESCE(vintage, 0));
+CREATE INDEX ix_wine_vintages_year ON wine_vintages(vintage);
 
-CREATE TABLE IF NOT EXISTS wine_grapes (
-    wine_grape_id INTEGER PRIMARY KEY,
-    wine_id INTEGER NOT NULL,
-
-    grape_variety TEXT NOT NULL,
+-- ------------------------------------------------------ wine characteristics
+CREATE TABLE wine_grapes (
+    wine_grape_id    INTEGER PRIMARY KEY,
+    wine_id          INTEGER NOT NULL REFERENCES wines(wine_id),
+    grape_variety    TEXT NOT NULL,
     blend_percentage REAL,
-
-    FOREIGN KEY (wine_id)
-        REFERENCES wines(wine_id)
-        ON DELETE CASCADE,
-
-    CHECK (
-        blend_percentage IS NULL
-        OR blend_percentage BETWEEN 0 AND 100
-    ),
-
     UNIQUE (wine_id, grape_variety)
 );
 
-
--- ============================================================
--- 6. WINE AROMAS
--- One row per aroma descriptor per wine
--- ============================================================
-CREATE TABLE IF NOT EXISTS wine_aromas (
-    aroma_id INTEGER PRIMARY KEY,
-    wine_id INTEGER NOT NULL,
-
-    aroma_category TEXT NOT NULL,
-    aroma_name TEXT NOT NULL,
-    intensity TEXT,
-
-    FOREIGN KEY (wine_id)
-        REFERENCES wines(wine_id)
-        ON DELETE CASCADE,
-
-    CHECK (
-        aroma_category IN (
-            'Fruit',
-            'Floral',
-            'Other'
-        )
-    ),
-
-    UNIQUE (wine_id, aroma_category, aroma_name)
-);
-
--- ============================================================
--- 7. WINE SENSORY
--- Structural and sensory characteristics
--- Scale: 0-5
--- One sensory profile per wine
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS wine_sensory (
+CREATE TABLE wine_sensory (
     sensory_id INTEGER PRIMARY KEY,
-    wine_id INTEGER NOT NULL UNIQUE,
-
-    structure TEXT,
-    finish TEXT,
-    balance TEXT,
-    body TEXT,
-    acidity TEXT,
-    tannin TEXT,
-    sweetness TEXT,
-
-    FOREIGN KEY (wine_id)
-        REFERENCES wines(wine_id)
-        ON DELETE CASCADE
+    wine_id    INTEGER NOT NULL UNIQUE REFERENCES wines(wine_id),
+    body       REAL,   -- ordinal 1 (very light) .. 5 (very full)
+    acidity    REAL,   -- ordinal 1 (low) .. 3 (high)
+    structure  REAL,
+    finish     REAL,
+    balance    REAL,
+    tannin     REAL,
+    sweetness  REAL
 );
 
--- ============================================================
--- 8. WINE RATINGS
--- Multiple ratings per wine from different reviewers
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS wine_ratings (
-    rating_id INTEGER PRIMARY KEY,
-    wine_id INTEGER NOT NULL,
-
-    score REAL NOT NULL,
-    reviewer TEXT,
-    source TEXT,
-
-    FOREIGN KEY (wine_id)
-        REFERENCES wines(wine_id)
-        ON DELETE CASCADE,
-
-    CHECK (score BETWEEN 0 AND 100)
+CREATE TABLE wine_aromas (
+    aroma_id       INTEGER PRIMARY KEY,
+    wine_id        INTEGER NOT NULL REFERENCES wines(wine_id),
+    aroma_category TEXT,
+    aroma_name     TEXT NOT NULL,
+    intensity      REAL,
+    UNIQUE (wine_id, aroma_name)
 );
 
-
--- ============================================================
--- 9. WINE PRICES
--- Multiple prices per wine across retailers
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS wine_prices (
-    price_id INTEGER PRIMARY KEY,
-    wine_id INTEGER NOT NULL,
-
-    price REAL NOT NULL,
-    currency TEXT NOT NULL,
-    retailer TEXT,
-
-    FOREIGN KEY (wine_id)
-        REFERENCES wines(wine_id)
-        ON DELETE CASCADE,
-
-    CHECK (price >= 0),
-    CHECK (length(currency) = 3)
+CREATE TABLE wine_pairings (
+    pairing_id INTEGER PRIMARY KEY,
+    wine_id    INTEGER NOT NULL REFERENCES wines(wine_id),
+    food       TEXT NOT NULL,
+    UNIQUE (wine_id, food)
 );
 
-
--- ============================================================
--- 10. WINE SOURCES
--- Tracks origin of collected wine data
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS wine_sources (
-    source_id INTEGER PRIMARY KEY,
-    wine_id INTEGER NOT NULL,
-
-    source_name TEXT NOT NULL,
-    external_id TEXT,
-    source_url TEXT,
-
-    FOREIGN KEY (wine_id)
-        REFERENCES wines(wine_id)
-        ON DELETE CASCADE,
-
-    UNIQUE (source_name, external_id)
+-- --------------------------------------------------- ratings, prices, sources
+CREATE TABLE wine_ratings (
+    rating_id    INTEGER PRIMARY KEY,
+    wine_id      INTEGER NOT NULL REFERENCES wines(wine_id),
+    vintage_id   INTEGER REFERENCES wine_vintages(vintage_id),  -- NULL = all vintages
+    score        REAL NOT NULL,
+    scale        REAL NOT NULL,       -- 100 for critic points, 5 for X-Wines users
+    rating_count INTEGER,             -- number of ratings behind an average
+    reviewer     TEXT,
+    source       TEXT,
+    source_url   TEXT,
+    score_pct    REAL GENERATED ALWAYS AS (score * 100.0 / scale) VIRTUAL
 );
+CREATE INDEX ix_wine_ratings_wine ON wine_ratings(wine_id);
 
+CREATE TABLE wine_prices (
+    price_id    INTEGER PRIMARY KEY,
+    wine_id     INTEGER NOT NULL REFERENCES wines(wine_id),
+    vintage_id  INTEGER REFERENCES wine_vintages(vintage_id),
+    price       REAL NOT NULL,
+    currency    TEXT NOT NULL,
+    retailer    TEXT,
+    source_url  TEXT,
+    observed_at TEXT
+);
+CREATE INDEX ix_wine_prices_wine ON wine_prices(wine_id);
 
--- ============================================================
--- INDEXES
--- Improve search, filtering, and recommendation queries
--- ============================================================
-
--- Geographic lookups
-CREATE INDEX IF NOT EXISTS idx_regions_country
-    ON regions(country_id);
-
-CREATE INDEX IF NOT EXISTS idx_regions_parent
-    ON regions(parent_region_id);
-
-CREATE INDEX IF NOT EXISTS idx_region_aliases_alias
-    ON region_aliases(alias);
-
-
--- Wine filtering
-CREATE INDEX IF NOT EXISTS idx_wines_region
-    ON wines(region_id);
-
-CREATE INDEX IF NOT EXISTS idx_wines_varietal
-    ON wines(varietal);
-
-CREATE INDEX IF NOT EXISTS idx_wines_vintage
-    ON wines(vintage);
-
-CREATE INDEX IF NOT EXISTS idx_wines_winery
-    ON wines(winery);
-
-
--- Recommendation features
-CREATE INDEX IF NOT EXISTS idx_wine_grapes_variety
-    ON wine_grapes(grape_variety);
-
-CREATE INDEX IF NOT EXISTS idx_wine_aromas_name
-    ON wine_aromas(aroma_name);
-
-CREATE INDEX IF NOT EXISTS idx_wine_aromas_category
-    ON wine_aromas(aroma_category);
-
-
--- Ratings and pricing
-CREATE INDEX IF NOT EXISTS idx_wine_ratings_wine
-    ON wine_ratings(wine_id);
-
-CREATE INDEX IF NOT EXISTS idx_wine_prices_wine
-    ON wine_prices(wine_id);
-
-
--- Source lookups
-CREATE INDEX IF NOT EXISTS idx_wine_sources_wine
-    ON wine_sources(wine_id);
+CREATE TABLE wine_sources (
+    source_id            INTEGER PRIMARY KEY,
+    wine_id              INTEGER NOT NULL REFERENCES wines(wine_id),
+    vintage_id           INTEGER REFERENCES wine_vintages(vintage_id),
+    source_name          TEXT NOT NULL,
+    external_id          TEXT,         -- X-Wines WineID, or "<report>#<rank>" for lists
+    source_url           TEXT,
+    rank                 INTEGER,
+    tasting_note         TEXT,
+    tasting_note_truncated INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX ux_wine_sources ON wine_sources(source_name, external_id)
+    WHERE external_id IS NOT NULL;
+CREATE INDEX ix_wine_sources_wine ON wine_sources(wine_id);
