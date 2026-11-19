@@ -3,14 +3,21 @@
 Design:
 * get-or-create for countries, regions, wineries, wines and vintages, using
   in-memory lookup caches loaded once at startup (fast, no per-row SELECT storms).
-* Wine identity = winery + title (accent/case/punctuation-insensitive).
+* Wine identity = winery + title (accent/case/punctuation-insensitive), with
+  fallbacks when the winery is unknown on one side:
+    - record has a winery -> match winery + title; failing that, adopt an existing
+      wine with the same title and NO winery (and set its winery);
+    - record has no winery -> match the same title alone, but only if exactly one
+      wine has it, and only if country / color do not conflict. If several wines
+      share the title it is ambiguous, so a separate no-winery wine is created
+      (a duplicate that can be merged later beats a wrong merge).
 * Re-running an import is safe: existing rows are matched, NULL fields are filled
   in, and ratings / prices are updated instead of duplicated.
 * If an insert fails, the current batch is rolled back and the caches reloaded,
   so the caches never point at rows that no longer exist.
 
-Known limitation: a record with no winery will not match an existing wine that
-has one (the identity differs), so prefer adapters that supply the winery.
+Name-only matching works when the normalized titles are identical. Titles that
+differ ("Château Figeac" vs "Château Figeac St.-Emilion") are not matched.
 """
 
 from __future__ import annotations
@@ -33,10 +40,10 @@ REQUIRED_TABLES = {
     "wineries",
     "wines",
     "wine_vintages",
+    "grapes",
     "wine_grapes",
     "wine_sensory",
     "wine_aromas",
-    "wine_pairings",
     "wine_ratings",
     "wine_prices",
     "wine_sources",
@@ -148,10 +155,15 @@ class WineDB:
                 "winery_id"
             ]
 
-        self._wines: Dict[Tuple[int, str], int] = {}
+        self._grapes: Dict[str, int] = {}
+        for r in c.execute("SELECT grape_id, name FROM grapes"):
+            self._grapes[_key(r["name"])] = r["grape_id"]
+
+        # title key -> {winery_id (0 = unknown): wine_id}
+        self._wines: Dict[str, Dict[int, int]] = {}
         for r in c.execute("SELECT wine_id, winery_id, title FROM wines"):
-            self._wines.setdefault(
-                (r["winery_id"] or 0, _key(r["title"])), r["wine_id"]
+            self._wines.setdefault(_key(r["title"]), {}).setdefault(
+                r["winery_id"] or 0, r["wine_id"]
             )
 
     # -------------------------------------------------------------- helpers
@@ -247,10 +259,61 @@ class WineDB:
             self._fill("wineries", "winery_id", winery_id, {"website": website})
         return winery_id
 
+    def _compatible(
+        self, wine_id: int, country_id: Optional[int], color: Optional[str]
+    ) -> bool:
+        """False only if the candidate wine clearly conflicts on country or color."""
+        row = self.conn.execute(
+            """SELECT w.color, r.country_id FROM wines w
+               LEFT JOIN regions r ON r.region_id = w.region_id WHERE w.wine_id = ?""",
+            (wine_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        if (
+            country_id is not None
+            and row["country_id"] is not None
+            and row["country_id"] != country_id
+        ):
+            return False
+        if color and row["color"] and fold(color) != fold(row["color"]):
+            return False
+        return True
+
     def get_wine(
-        self, rec: WineRecord, winery_id: Optional[int], region_id: Optional[int]
+        self,
+        rec: WineRecord,
+        winery_id: Optional[int],
+        region_id: Optional[int],
+        country_id: Optional[int] = None,
     ) -> Tuple[int, bool]:
-        key = (winery_id or 0, _key(rec.title))
+        title_key = _key(rec.title)
+        by_winery = self._wines.setdefault(title_key, {})
+        wine_id = by_winery.get(winery_id or 0)
+
+        if wine_id is None and winery_id is not None and 0 in by_winery:
+            # Same title already stored without a winery: adopt it and record the winery.
+            candidate = by_winery[0]
+            if self._compatible(candidate, country_id, rec.color):
+                wine_id = by_winery.pop(0)
+                by_winery[winery_id] = wine_id
+                self.conn.execute(
+                    "UPDATE wines SET winery_id = ? WHERE wine_id = ?",
+                    (winery_id, wine_id),
+                )
+        elif wine_id is None and winery_id is None and by_winery:
+            # No winery on this record: match on the title alone if it is unambiguous.
+            if len(by_winery) == 1:
+                ((candidate_winery, candidate),) = by_winery.items()
+                if self._compatible(candidate, country_id, rec.color):
+                    wine_id = candidate
+            else:
+                LOG.warning(
+                    "Ambiguous title %r (%d wineries); not merging",
+                    rec.title,
+                    len(by_winery),
+                )
+
         details = {
             "region_id": region_id,
             "color": rec.color,
@@ -258,15 +321,22 @@ class WineDB:
             "abv": rec.abv,
             "closure": rec.closure,
         }
-        wine_id = self._wines.get(key)
         if wine_id is not None:
             self._fill("wines", "wine_id", wine_id, details)
             return wine_id, False
         wine_id = self._insert(
             "wines", {"winery_id": winery_id, "title": rec.title, **details}
         )
-        self._wines[key] = wine_id
+        by_winery[winery_id or 0] = wine_id
         return wine_id, True
+
+    def get_grape(self, name: str) -> int:
+        """Get or create a grape in the shared ``grapes`` table."""
+        grape_id = self._grapes.get(_key(name))
+        if grape_id is None:
+            grape_id = self._insert("grapes", {"name": name})
+            self._grapes[_key(name)] = grape_id
+        return grape_id
 
     def get_vintage_id(self, wine_id: int, vintage: Optional[int]) -> int:
         """Get or create the vintage row. ``vintage=None`` is the non-vintage row."""
@@ -282,11 +352,11 @@ class WineDB:
     def _write_grapes(self, wine_id, rec):
         for g in rec.grapes:
             self.conn.execute(
-                """INSERT INTO wine_grapes (wine_id, grape_variety, blend_percentage)
+                """INSERT INTO wine_grapes (wine_id, grape_id, blend_percentage)
                    VALUES (?, ?, ?)
-                   ON CONFLICT(wine_id, grape_variety) DO UPDATE
+                   ON CONFLICT(wine_id, grape_id) DO UPDATE
                    SET blend_percentage = COALESCE(blend_percentage, excluded.blend_percentage)""",
-                (wine_id, g.name, g.percentage),
+                (wine_id, self.get_grape(g.name), g.percentage),
             )
 
     def _write_sensory(self, wine_id, rec):
@@ -313,13 +383,6 @@ class WineDB:
                    SET aroma_category = COALESCE(aroma_category, excluded.aroma_category),
                        intensity = COALESCE(intensity, excluded.intensity)""",
                 (wine_id, a.category, a.name, a.intensity),
-            )
-
-    def _write_pairings(self, wine_id, rec):
-        for food in rec.pairings:
-            self.conn.execute(
-                "INSERT OR IGNORE INTO wine_pairings (wine_id, food) VALUES (?, ?)",
-                (wine_id, food),
             )
 
     def _write_rating(self, wine_id: int, vintage_id: Optional[int], r: Rating):
@@ -421,7 +484,7 @@ class WineDB:
         country_id = self.get_country(rec.country, rec.country_iso)
         region_id = self.get_region(country_id, rec.region)
         winery_id = self.get_winery(rec.winery, region_id, rec.winery_website)
-        wine_id, created = self.get_wine(rec, winery_id, region_id)
+        wine_id, created = self.get_wine(rec, winery_id, region_id, country_id)
 
         vintage_ids: Dict[Optional[int], int] = {
             v: self.get_vintage_id(wine_id, v) for v in rec.vintages
@@ -438,7 +501,6 @@ class WineDB:
         self._write_grapes(wine_id, rec)
         self._write_sensory(wine_id, rec)
         self._write_aromas(wine_id, rec)
-        self._write_pairings(wine_id, rec)
         for r in rec.ratings:
             self._write_rating(wine_id, vid(r.vintage), r)
         for p in rec.prices:

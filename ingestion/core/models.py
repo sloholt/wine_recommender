@@ -100,7 +100,6 @@ class WineRecord:
     vintages: List[Optional[int]] = field(default_factory=list)
     grapes: List[Grape] = field(default_factory=list)
     aromas: List[Aroma] = field(default_factory=list)
-    pairings: List[str] = field(default_factory=list)
     sensory: Optional[Sensory] = None
 
     ratings: List[Rating] = field(default_factory=list)

@@ -66,13 +66,19 @@ CREATE UNIQUE INDEX ux_wine_vintages ON wine_vintages(wine_id, COALESCE(vintage,
 CREATE INDEX ix_wine_vintages_year ON wine_vintages(vintage);
 
 -- ------------------------------------------------------ wine characteristics
-CREATE TABLE wine_grapes (
-    wine_grape_id    INTEGER PRIMARY KEY,
-    wine_id          INTEGER NOT NULL REFERENCES wines(wine_id),
-    grape_variety    TEXT NOT NULL,
-    blend_percentage REAL,
-    UNIQUE (wine_id, grape_variety)
+-- Each grape name is stored once; wine_grapes links wines to grapes.
+CREATE TABLE grapes (
+    grape_id INTEGER PRIMARY KEY,
+    name     TEXT NOT NULL UNIQUE COLLATE NOCASE
 );
+
+CREATE TABLE wine_grapes (
+    wine_id          INTEGER NOT NULL REFERENCES wines(wine_id),
+    grape_id         INTEGER NOT NULL REFERENCES grapes(grape_id),
+    blend_percentage REAL,           -- NULL when the source gives no percentage
+    PRIMARY KEY (wine_id, grape_id)
+);
+CREATE INDEX ix_wine_grapes_grape ON wine_grapes(grape_id);
 
 CREATE TABLE wine_sensory (
     sensory_id INTEGER PRIMARY KEY,
@@ -93,13 +99,6 @@ CREATE TABLE wine_aromas (
     aroma_name     TEXT NOT NULL,
     intensity      REAL,
     UNIQUE (wine_id, aroma_name)
-);
-
-CREATE TABLE wine_pairings (
-    pairing_id INTEGER PRIMARY KEY,
-    wine_id    INTEGER NOT NULL REFERENCES wines(wine_id),
-    food       TEXT NOT NULL,
-    UNIQUE (wine_id, food)
 );
 
 -- --------------------------------------------------- ratings, prices, sources

@@ -494,7 +494,6 @@ def normalize_wine(rec: WineRecord) -> Optional[WineRecord]:
         vintages=vintages,
         grapes=_clean_grapes(rec.grapes),
         aromas=_clean_aromas(rec.aromas),
-        pairings=parse_list(rec.pairings),
         sensory=_clean_sensory(rec.sensory),
         ratings=ratings,
         prices=prices,
