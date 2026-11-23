@@ -48,7 +48,7 @@ from selenium.common.exceptions import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-OUTPUT_DIR = PROJECT_ROOT / "data" / "raw"
+OUTPUT_DIR = PROJECT_ROOT / "data" / "raw" / "top100json"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 USER_AGENT = "WineResearchBot/1.0"

@@ -44,6 +44,7 @@ from ..core.normalize import (
 from ..core.tasting import parse_tasting_note
 
 LOG = logging.getLogger(__name__)
+FILE_GLOB = "*.json"  # for --input <folder>
 
 
 def _strip_vintage(title: str, vintage) -> str:

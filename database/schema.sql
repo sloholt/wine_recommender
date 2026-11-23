@@ -48,7 +48,9 @@ CREATE TABLE wines (
     full_title TEXT,                          -- original title as published, kept for display
     style      TEXT,      -- Sparkling / Dessert / Fortified (NULL = still table wine)
     color      TEXT,      -- Red / White / Rosé / Orange (independent of style)
+    color_inferred INTEGER NOT NULL DEFAULT 0,  -- 1 = filled from the grapes, not stated by a source
     varietal  TEXT,      -- only when a single grape; otherwise see wine_grapes
+    blend_type TEXT,     -- named blend style, e.g. 'Bordeaux Red Blend' (NULL if none stated)
     abv       REAL,
     closure   TEXT
 );
@@ -56,6 +58,7 @@ CREATE TABLE wines (
 -- this index, because NULLs are distinct; the ingest code must handle that case.)
 CREATE UNIQUE INDEX ux_wines ON wines(COALESCE(winery_id, 0), name);
 CREATE INDEX ix_wines_region ON wines(region_id);
+CREATE INDEX ix_wines_winery ON wines(winery_id);
 CREATE INDEX ix_wines_color  ON wines(color);
 
 -- One row per wine + year. vintage NULL = non-vintage (N.V.).
@@ -103,6 +106,23 @@ CREATE TABLE wine_aromas (
     UNIQUE (wine_id, aroma_name)
 );
 
+-- ------------------------------------------------------------ food pairings
+-- Each food is stored once (e.g. 'Beef', 'Goat Cheese'), with a broad category
+-- ('Meat', 'Cheese', ...) so a recommender can match "cheese" to every cheese.
+CREATE TABLE foods (
+    food_id  INTEGER PRIMARY KEY,
+    name     TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    category TEXT
+);
+
+CREATE TABLE wine_pairings (
+    wine_id INTEGER NOT NULL REFERENCES wines(wine_id),
+    food_id INTEGER NOT NULL REFERENCES foods(food_id),
+    source  TEXT,              -- where the pairing came from (first source kept)
+    PRIMARY KEY (wine_id, food_id)
+);
+CREATE INDEX ix_wine_pairings_food ON wine_pairings(food_id);
+
 -- --------------------------------------------------- ratings, prices, sources
 CREATE TABLE wine_ratings (
     rating_id    INTEGER PRIMARY KEY,
@@ -117,6 +137,24 @@ CREATE TABLE wine_ratings (
     score_pct    REAL GENERATED ALWAYS AS (score * 100.0 / scale) VIRTUAL
 );
 CREATE INDEX ix_wine_ratings_wine ON wine_ratings(wine_id);
+
+-- One row per individual user rating (e.g. X-Wines). These feed collaborative
+-- filtering; wine_ratings holds the per-wine average computed from them.
+CREATE TABLE user_ratings (
+    user_rating_id INTEGER PRIMARY KEY,
+    source         TEXT NOT NULL,     -- e.g. 'X-Wines'
+    user_id        TEXT NOT NULL,     -- the source's user id (not a local account)
+    wine_id        INTEGER NOT NULL REFERENCES wines(wine_id),
+    vintage_id     INTEGER REFERENCES wine_vintages(vintage_id),  -- NULL = year unknown
+    score          REAL NOT NULL,
+    scale          REAL NOT NULL,     -- 5 for X-Wines
+    rated_at       TEXT,              -- ISO 8601
+    external_id    TEXT               -- the source's rating id, for safe re-imports
+);
+CREATE UNIQUE INDEX ux_user_ratings ON user_ratings(source, external_id)
+    WHERE external_id IS NOT NULL;
+CREATE INDEX ix_user_ratings_wine ON user_ratings(wine_id);
+CREATE INDEX ix_user_ratings_user ON user_ratings(source, user_id);
 
 CREATE TABLE wine_prices (
     price_id    INTEGER PRIMARY KEY,

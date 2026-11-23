@@ -124,7 +124,10 @@ class Wine(Base):
     full_title = Column(Text)
     style = Column(Text)  # Sparkling / Dessert / Fortified; NULL = still
     color = Column(Text)  # Red / White / Rosé / Orange
+    # 1 = color filled from the grapes (ingestion/core/colors.py), not stated by a source
+    color_inferred = Column(Integer, nullable=False, server_default="0")
     varietal = Column(Text)  # only when a single grape; see WineGrape otherwise
+    blend_type = Column(Text)  # named blend style, e.g. "Bordeaux Red Blend"
     abv = Column(REAL)
     closure = Column(Text)
 
@@ -154,6 +157,12 @@ class Wine(Base):
     sources = relationship(
         "WineSource", back_populates="wine", cascade="all, delete-orphan"
     )
+    pairings = relationship(
+        "WinePairing", back_populates="wine", cascade="all, delete-orphan"
+    )
+    user_ratings = relationship(
+        "UserRating", back_populates="wine", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<Wine({self.wine_id}, {self.title!r})>"
@@ -166,6 +175,7 @@ Index(
     unique=True,
 )
 Index("ix_wines_region", Wine.__table__.c.region_id)
+Index("ix_wines_winery", Wine.__table__.c.winery_id)
 Index("ix_wines_color", Wine.__table__.c.color)
 
 
@@ -272,6 +282,69 @@ class WineRating(Base):
 
 
 Index("ix_wine_ratings_wine", WineRating.__table__.c.wine_id)
+
+
+class Food(Base):
+    """Each food is stored once; WinePairing links wines to foods."""
+
+    __tablename__ = "foods"
+
+    food_id = Column(Integer, primary_key=True)
+    name = Column(Text(collation="NOCASE"), nullable=False, unique=True)
+    category = Column(Text)  # Meat / Poultry / Fish & Seafood / Cheese / ...
+
+    wine_links = relationship("WinePairing", back_populates="food")
+
+    def __repr__(self):
+        return f"<Food({self.food_id}, {self.name!r})>"
+
+
+class WinePairing(Base):
+    __tablename__ = "wine_pairings"
+
+    wine_id = Column(Integer, ForeignKey("wines.wine_id"), primary_key=True)
+    food_id = Column(Integer, ForeignKey("foods.food_id"), primary_key=True)
+    source = Column(Text)
+
+    wine = relationship("Wine", back_populates="pairings")
+    food = relationship("Food", back_populates="wine_links")
+
+
+Index("ix_wine_pairings_food", WinePairing.__table__.c.food_id)
+
+
+class UserRating(Base):
+    """One individual user's rating (e.g. X-Wines); used for collaborative filtering."""
+
+    __tablename__ = "user_ratings"
+
+    user_rating_id = Column(Integer, primary_key=True)
+    source = Column(Text, nullable=False)
+    user_id = Column(Text, nullable=False)
+    wine_id = Column(Integer, ForeignKey("wines.wine_id"), nullable=False)
+    vintage_id = Column(Integer, ForeignKey("wine_vintages.vintage_id"))
+    score = Column(REAL, nullable=False)
+    scale = Column(REAL, nullable=False)
+    rated_at = Column(Text)
+    external_id = Column(Text)
+
+    wine = relationship("Wine", back_populates="user_ratings")
+    vintage = relationship("WineVintage")
+
+
+Index(
+    "ux_user_ratings",
+    UserRating.__table__.c.source,
+    UserRating.__table__.c.external_id,
+    unique=True,
+    sqlite_where=UserRating.__table__.c.external_id.isnot(None),
+)
+Index("ix_user_ratings_wine", UserRating.__table__.c.wine_id)
+Index(
+    "ix_user_ratings_user",
+    UserRating.__table__.c.source,
+    UserRating.__table__.c.user_id,
+)
 
 
 class WinePrice(Base):

@@ -96,6 +96,7 @@ class WineRecord:
     style: Optional[str] = None  # Sparkling / Dessert / Fortified
     color: Optional[str] = None  # Red / White / Rosé / Orange
     varietal: Optional[str] = None  # only when a single grape; else use grapes
+    blend_type: Optional[str] = None  # named blend, e.g. "Bordeaux Red Blend"
     abv: Optional[float] = None
     closure: Optional[str] = None
 
@@ -103,7 +104,29 @@ class WineRecord:
     grapes: List[Grape] = field(default_factory=list)
     aromas: List[Aroma] = field(default_factory=list)
     sensory: Optional[Sensory] = None
+    pairings: List[str] = field(default_factory=list)  # food names, e.g. "Beef"
 
     ratings: List[Rating] = field(default_factory=list)
     prices: List[Price] = field(default_factory=list)
     sources: List[Source] = field(default_factory=list)
+
+
+@dataclass
+class UserRating:
+    """One person's rating of a wine, from a source with per-user data (X-Wines).
+
+    The wine is identified by the source's own id (``wine_external_id``), which
+    must match a ``Source.external_id`` loaded earlier from the same source.
+    ``non_vintage=True`` means the user rated the N.V. bottling; ``vintage=None``
+    with ``non_vintage=False`` means the year is unknown.
+    """
+
+    source: str
+    user_id: str
+    wine_external_id: str
+    score: float
+    scale: float
+    vintage: Optional[int] = None
+    non_vintage: bool = False
+    rated_at: Optional[str] = None  # ISO 8601 text
+    external_id: Optional[str] = None  # the source's rating id

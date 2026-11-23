@@ -16,8 +16,15 @@ Design:
 * If an insert fails, the current batch is rolled back and the caches reloaded,
   so the caches never point at rows that no longer exist.
 
-Name-only matching works when the normalized names are identical. Titles that
-differ ("Château Figeac" vs "Château Figeac St.-Emilion") are not matched.
+* A record already loaded from the same source (same source + external_id) goes
+  straight back to its wine.
+* Fuzzy fallback (core/matching.py), tried only when nothing above matched:
+  candidates are wines of any winery with the same name (any region; for a record
+  with no winery, the longest known winery name its title starts with), from a
+  different source, with no conflicting country / color / style / grapes.
+  "Dog Point Sauvignon Blanc Marlborough Section 94" -> "Section 94 Sauvignon
+  Blanc". Only a unique best candidate is accepted; each merge is recorded in
+  ``self.fuzzy_matches`` for review.
 """
 
 from __future__ import annotations
@@ -28,8 +35,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from .models import Price, Rating, Source, WineRecord
-from .normalize import fold, normalize_wine
+from . import matching
+from .colors import infer_colors
+from .food import food_category
+from .models import Price, Rating, Source, UserRating, WineRecord
+from .naming import _KEEP, _PLACES
+from .normalize import GRAPE_SYNONYMS, fold, normalize_user_rating, normalize_wine
+from .tasting import _GRAPE_LIST
 
 LOG = logging.getLogger(__name__)
 
@@ -47,6 +59,9 @@ REQUIRED_TABLES = {
     "wine_ratings",
     "wine_prices",
     "wine_sources",
+    "foods",
+    "wine_pairings",
+    "user_ratings",
 }
 
 SENSORY_FIELDS = (
@@ -68,12 +83,20 @@ def _key(text: Optional[str]) -> str:
 @dataclass
 class IngestStats:
     created: int = 0  # new wines
-    matched: int = 0  # wines that already existed
+    matched: int = 0  # wines that already existed (includes fuzzy)
+    fuzzy: int = 0  # of those, matched by fuzzy name matching
     skipped: int = 0  # records dropped by the normalizer (no name)
 
     @property
     def total(self) -> int:
         return self.created + self.matched + self.skipped
+
+
+@dataclass
+class RatingStats:
+    loaded: int = 0  # user ratings inserted or refreshed
+    unknown_wine: int = 0  # wine id not loaded from this source yet
+    invalid: int = 0  # dropped by the normalizer
 
 
 class WineDB:
@@ -97,6 +120,10 @@ class WineDB:
         missing = REQUIRED_TABLES - self._tables()
         if missing:
             raise ValueError(f"Database is missing tables: {sorted(missing)}")
+        self._add_missing_columns()
+
+        self.fuzzy_matches: List[dict] = []  # one entry per fuzzy merge, for review
+        self._winery_created = False  # did the last get_winery() insert a row?
 
         self._load_caches()
 
@@ -116,6 +143,31 @@ class WineDB:
 
     def close(self):
         self.conn.close()
+
+    # Columns added to schema.sql after a database may have been created from an
+    # older version: added in place so existing databases keep working.
+    _LATER_COLUMNS = {
+        "wines": {
+            "blend_type": "TEXT",
+            "color_inferred": "INTEGER NOT NULL DEFAULT 0",
+        },
+    }
+
+    def _add_missing_columns(self):
+        for table, columns in self._LATER_COLUMNS.items():
+            have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+            for column, decl in columns.items():
+                if column not in have:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+                    LOG.info("Added column %s.%s", table, column)
+        self.conn.execute("CREATE INDEX IF NOT EXISTS ix_wines_winery ON wines(winery_id)")
+        self.conn.commit()
+
+    def infer_colors(self, overrides_path=None) -> int:
+        """Fill missing colors from grapes (see core/colors.py) and commit."""
+        count = infer_colors(self.conn, overrides_path)
+        self.conn.commit()
+        return count
 
     def _tables(self) -> Set[str]:
         rows = self.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -159,12 +211,44 @@ class WineDB:
         for r in c.execute("SELECT grape_id, name FROM grapes"):
             self._grapes[_key(r["name"])] = r["grape_id"]
 
-        # title key -> {winery_id (0 = unknown): wine_id}
+        # (source_name, external_id) -> wine_id: a re-imported record goes straight
+        # back to its wine, whatever the name matching would decide this time.
+        self._source_wines: Dict[Tuple[str, str], int] = {}
+        for r in c.execute(
+            """SELECT source_name, external_id, wine_id FROM wine_sources
+               WHERE external_id IS NOT NULL"""
+        ):
+            self._source_wines[(r["source_name"], r["external_id"])] = r["wine_id"]
+
+        self._foods: Dict[str, int] = {}
+        for r in c.execute("SELECT food_id, name FROM foods"):
+            self._foods[_key(r["name"])] = r["food_id"]
+
+        # title key -> {winery_id (0 = unknown): wine_id}; winery_id -> wine_ids
         self._wines: Dict[str, Dict[int, int]] = {}
+        self._winery_wines: Dict[int, List[int]] = {}
         for r in c.execute("SELECT wine_id, winery_id, name FROM wines"):
             self._wines.setdefault(_key(r["name"]), {}).setdefault(
                 r["winery_id"] or 0, r["wine_id"]
             )
+            if r["winery_id"] is not None:
+                self._winery_wines.setdefault(r["winery_id"], []).append(r["wine_id"])
+
+        # wine_id -> names of the sources it came from (fuzzy matching never merges
+        # two wines of the same source: a source lists its own wines separately)
+        self._wine_source_names: Dict[int, Set[str]] = {}
+        for r in c.execute("SELECT DISTINCT wine_id, source_name FROM wine_sources"):
+            self._wine_source_names.setdefault(r["wine_id"], set()).add(r["source_name"])
+
+        # Grapes are removed from titles before comparing; place words are kept
+        # but do not count as distinctive.
+        self._vocab = matching.Vocabulary()
+        self._vocab.add_grapes(_GRAPE_LIST)
+        self._vocab.add_grapes(GRAPE_SYNONYMS)
+        self._vocab.add_grapes(r["name"] for r in c.execute("SELECT name FROM grapes"))
+        self._vocab.add_places((_PLACES + "|" + _KEEP).replace("\n", "|").split("|"))
+        self._vocab.add_places(r["name"] for r in c.execute("SELECT name FROM regions"))
+        self._vocab.add_places(r["name"] for r in c.execute("SELECT name FROM countries"))
 
     # -------------------------------------------------------------- helpers
     def _insert(self, table: str, values: dict) -> int:
@@ -198,6 +282,7 @@ class WineDB:
         if country_id is None:
             country_id = self._insert("countries", {"name": name, "iso_code": iso})
             self._countries[_key(name)] = country_id
+            self._vocab.add_place(name)
             if iso:
                 self._country_by_iso[iso] = country_id
                 self._country_has_iso.add(country_id)
@@ -226,6 +311,7 @@ class WineDB:
             )
             self._regions[(country_id, key)] = region_id
             self._region_country[region_id] = country_id
+            self._vocab.add_place(name)
         return region_id
 
     def get_winery(
@@ -250,6 +336,7 @@ class WineDB:
                 (region_id, winery_id),
             )
 
+        self._winery_created = winery_id is None
         if winery_id is None:
             winery_id = self._insert(
                 "wineries", {"name": name, "region_id": region_id, "website": website}
@@ -280,28 +367,41 @@ class WineDB:
             return False
         return True
 
+    def _known_wine(self, rec: WineRecord) -> Optional[int]:
+        """The wine this record was loaded into before (same source + external id)."""
+        for s in rec.sources:
+            if s.external_id:
+                wine_id = self._source_wines.get((s.name, s.external_id))
+                if wine_id is not None:
+                    return wine_id
+        return None
+
     def get_wine(
         self,
         rec: WineRecord,
         winery_id: Optional[int],
         region_id: Optional[int],
         country_id: Optional[int] = None,
+        known_wine_id: Optional[int] = None,
     ) -> Tuple[int, bool]:
         title_key = _key(rec.name)
         by_winery = self._wines.setdefault(title_key, {})
-        wine_id = by_winery.get(winery_id or 0)
+        wine_id = known_wine_id if known_wine_id is not None else by_winery.get(winery_id or 0)
 
-        if wine_id is None and winery_id is not None and 0 in by_winery:
+        if wine_id is not None:
+            pass
+        elif winery_id is not None and 0 in by_winery:
             # Same title already stored without a winery: adopt it and record the winery.
             candidate = by_winery[0]
             if self._compatible(candidate, country_id, rec.color):
                 wine_id = by_winery.pop(0)
                 by_winery[winery_id] = wine_id
+                self._winery_wines.setdefault(winery_id, []).append(wine_id)
                 self.conn.execute(
                     "UPDATE wines SET winery_id = ? WHERE wine_id = ?",
                     (winery_id, wine_id),
                 )
-        elif wine_id is None and winery_id is None and by_winery:
+        elif winery_id is None and by_winery:
             # No winery on this record: match on the title alone if it is unambiguous.
             if len(by_winery) == 1:
                 ((candidate_winery, candidate),) = by_winery.items()
@@ -314,23 +414,143 @@ class WineDB:
                     len(by_winery),
                 )
 
+        if wine_id is None:
+            wine_id = self._fuzzy_wine(rec, country_id)
+            if wine_id is not None and winery_id is not None:
+                if self._winery_created:
+                    self._drop_winery_if_empty(rec.winery, winery_id)
+                else:  # remember the alias so a repeat of this title matches exactly
+                    by_winery.setdefault(winery_id, wine_id)
+
         details = {
             "region_id": region_id,
             "full_title": rec.full_title,
             "style": rec.style,
             "color": rec.color,
             "varietal": rec.varietal,
+            "blend_type": rec.blend_type,
             "abv": rec.abv,
             "closure": rec.closure,
         }
         if wine_id is not None:
+            if rec.color:  # a stated color replaces one inferred from the grapes
+                self.conn.execute(
+                    """UPDATE wines SET color = ?, color_inferred = 0
+                       WHERE wine_id = ? AND color_inferred = 1""",
+                    (rec.color, wine_id),
+                )
             self._fill("wines", "wine_id", wine_id, details)
             return wine_id, False
         wine_id = self._insert(
             "wines", {"winery_id": winery_id, "name": rec.name, **details}
         )
         by_winery[winery_id or 0] = wine_id
+        if winery_id is not None:
+            self._winery_wines.setdefault(winery_id, []).append(wine_id)
         return wine_id, True
+
+    # ------------------------------------------------------- fuzzy matching
+    def _drop_winery_if_empty(self, name: Optional[str], winery_id: int):
+        """Remove a winery created for a record that then matched another wine."""
+        cur = self.conn.execute(
+            """DELETE FROM wineries WHERE winery_id = ?
+               AND NOT EXISTS (SELECT 1 FROM wines WHERE winery_id = ?)""",
+            (winery_id, winery_id),
+        )
+        if cur.rowcount:
+            by_region = self._wineries.get(_key(name), {})
+            for region_key, wid in list(by_region.items()):
+                if wid == winery_id:
+                    del by_region[region_key]
+        self._winery_created = False
+
+    def _winery_key_for(self, rec: WineRecord, title: str) -> Optional[str]:
+        """The record's winery key; with no winery, the longest known winery name
+        the title starts with ("Domaine Gramenon Côtes-du-Rhône ..." -> domaine gramenon)."""
+        if rec.winery:
+            return _key(rec.winery)
+        tokens = fold(title).split()
+        for size in range(min(6, len(tokens) - 1), 0, -1):
+            key = " ".join(tokens[:size])
+            if self._wineries.get(key):
+                return key
+        return None
+
+    def _fuzzy_wine(self, rec: WineRecord, country_id: Optional[int]) -> Optional[int]:
+        title = rec.full_title or rec.name
+        winery_key = self._winery_key_for(rec, title)
+        if not winery_key:
+            return None
+        rec_sources = {s.name for s in rec.sources}
+        candidates = [
+            wine_id
+            for winery_id in set(self._wineries.get(winery_key, {}).values())
+            for wine_id in self._winery_wines.get(winery_id, [])
+            if not (self._wine_source_names.get(wine_id, set()) & rec_sources)
+        ]
+        if not candidates:
+            return None
+
+        marks = ",".join("?" * len(candidates))
+        rows = self.conn.execute(
+            f"""SELECT w.wine_id, w.name, w.full_title, w.style, w.varietal,
+                       w.color, r.country_id
+                FROM wines w LEFT JOIN regions r ON r.region_id = w.region_id
+                WHERE w.wine_id IN ({marks})""",
+            candidates,
+        ).fetchall()
+        grapes: Dict[int, List[str]] = {}
+        for g in self.conn.execute(
+            f"""SELECT wg.wine_id, g.name FROM wine_grapes wg
+                JOIN grapes g USING (grape_id) WHERE wg.wine_id IN ({marks})""",
+            candidates,
+        ):
+            grapes.setdefault(g["wine_id"], []).append(g["name"])
+
+        winery_tokens = winery_key.split()
+        rec_profile = matching.profile(title, winery_tokens, self._vocab).with_grapes(
+            [g.name for g in rec.grapes] + ([rec.varietal] if rec.varietal else [])
+        )
+        scored = []
+        for row in rows:
+            if country_id and row["country_id"] and row["country_id"] != country_id:
+                continue
+            if rec.color and row["color"] and fold(rec.color) != fold(row["color"]):
+                continue
+            if rec.style and row["style"] and rec.style != row["style"]:
+                continue
+            cand = matching.profile(
+                row["full_title"] or row["name"], winery_tokens, self._vocab
+            ).with_grapes(
+                grapes.get(row["wine_id"], []) + ([row["varietal"]] if row["varietal"] else [])
+            )
+            if matching.grapes_conflict(rec_profile, cand):
+                continue
+            score = matching.name_score(rec_profile, cand)
+            if score is not None:
+                scored.append((score, row["wine_id"]))
+
+        best = matching.best_match(scored)
+        if best is None:
+            if len(scored) > 1:
+                LOG.debug("Fuzzy match for %r is ambiguous; not merging", title)
+            return None
+        score, wine_id = best
+        matched = next(r for r in rows if r["wine_id"] == wine_id)
+        self.fuzzy_matches.append(
+            {
+                "record_title": title,
+                "record_winery": rec.winery or "",
+                "record_source": ", ".join(sorted(rec_sources)),
+                "wine_id": wine_id,
+                "matched_title": matched["full_title"] or matched["name"],
+                "matched_sources": ", ".join(
+                    sorted(self._wine_source_names.get(wine_id, set()))
+                ),
+                "score": round(score, 3),
+            }
+        )
+        return wine_id
 
     def get_grape(self, name: str) -> int:
         """Get or create a grape in the shared ``grapes`` table."""
@@ -338,12 +558,26 @@ class WineDB:
         if grape_id is None:
             grape_id = self._insert("grapes", {"name": name})
             self._grapes[_key(name)] = grape_id
+            self._vocab.add_grape(name)
         return grape_id
+
+    def get_food(self, name: str) -> int:
+        """Get or create a food in the shared ``foods`` table (with its category)."""
+        food_id = self._foods.get(_key(name))
+        if food_id is None:
+            food_id = self._insert(
+                "foods", {"name": name, "category": food_category(name)}
+            )
+            self._foods[_key(name)] = food_id
+        return food_id
 
     def get_vintage_id(self, wine_id: int, vintage: Optional[int]) -> int:
         """Get or create the vintage row. ``vintage=None`` is the non-vintage row."""
         row = self.conn.execute(
-            "SELECT vintage_id FROM wine_vintages WHERE wine_id = ? AND vintage IS ?",
+            # Written to match the ux_wine_vintages expression index exactly;
+            # "vintage IS ?" made SQLite scan every row of that year instead.
+            """SELECT vintage_id FROM wine_vintages
+               WHERE wine_id = ? AND COALESCE(vintage, 0) = COALESCE(?, 0)""",
             (wine_id, vintage),
         ).fetchone()
         if row:
@@ -385,6 +619,15 @@ class WineDB:
                    SET aroma_category = COALESCE(aroma_category, excluded.aroma_category),
                        intensity = COALESCE(intensity, excluded.intensity)""",
                 (wine_id, a.category, a.name, a.intensity),
+            )
+
+    def _write_pairings(self, wine_id, rec):
+        source = rec.sources[0].name if rec.sources else None
+        for food in rec.pairings:
+            self.conn.execute(
+                """INSERT INTO wine_pairings (wine_id, food_id, source) VALUES (?, ?, ?)
+                   ON CONFLICT(wine_id, food_id) DO NOTHING""",
+                (wine_id, self.get_food(food), source),
             )
 
     def _write_rating(self, wine_id: int, vintage_id: Optional[int], r: Rating):
@@ -466,6 +709,9 @@ class WineDB:
                 },
             )
         else:
+            if s.external_id:
+                self._source_wines[(s.name, s.external_id)] = wine_id
+            self._wine_source_names.setdefault(wine_id, set()).add(s.name)
             self._insert(
                 "wine_sources",
                 {
@@ -483,10 +729,20 @@ class WineDB:
     # ---------------------------------------------------------------- ingest
     def ingest(self, rec: WineRecord) -> Tuple[int, bool]:
         """Write one already-normalized record. Returns (wine_id, created)."""
+        self._winery_created = False
         country_id = self.get_country(rec.country, rec.country_iso)
         region_id = self.get_region(country_id, rec.region)
-        winery_id = self.get_winery(rec.winery, region_id, rec.winery_website)
-        wine_id, created = self.get_wine(rec, winery_id, region_id, country_id)
+        known = self._known_wine(rec)
+        if known is not None:
+            row = self.conn.execute(
+                "SELECT winery_id FROM wines WHERE wine_id = ?", (known,)
+            ).fetchone()
+            winery_id = row["winery_id"] if row else None
+            if winery_id is not None and rec.winery_website:
+                self._fill("wineries", "winery_id", winery_id, {"website": rec.winery_website})
+        else:
+            winery_id = self.get_winery(rec.winery, region_id, rec.winery_website)
+        wine_id, created = self.get_wine(rec, winery_id, region_id, country_id, known)
 
         vintage_ids: Dict[Optional[int], int] = {
             v: self.get_vintage_id(wine_id, v) for v in rec.vintages
@@ -503,6 +759,7 @@ class WineDB:
         self._write_grapes(wine_id, rec)
         self._write_sensory(wine_id, rec)
         self._write_aromas(wine_id, rec)
+        self._write_pairings(wine_id, rec)
         for r in rec.ratings:
             self._write_rating(wine_id, vid(r.vintage), r)
         for p in rec.prices:
@@ -537,7 +794,9 @@ class WineDB:
                     stats.skipped += 1
                     LOG.warning("Skipping record %d with no name", index)
                     continue
+                fuzzy_before = len(self.fuzzy_matches)
                 _, created = self.ingest(rec)
+                stats.fuzzy += len(self.fuzzy_matches) - fuzzy_before
                 stats.created += int(created)
                 stats.matched += int(not created)
                 pending += 1
@@ -553,10 +812,109 @@ class WineDB:
             ) from exc
 
         LOG.info(
-            "Ingested %d records: %d new wines, %d existing wines, %d skipped",
+            "Ingested %d records: %d new wines, %d existing wines (%d by fuzzy "
+            "name match), %d skipped",
             stats.total,
             stats.created,
             stats.matched,
+            stats.fuzzy,
             stats.skipped,
         )
         return stats
+
+    # ---------------------------------------------------------- user ratings
+    def ingest_user_ratings(
+        self, ratings: Iterable[UserRating], *, commit_every: int = 20000
+    ) -> RatingStats:
+        """Write individual user ratings, then refresh each wine's average rating.
+
+        The wines must already be loaded from the same source: a rating's
+        ``wine_external_id`` is looked up in ``wine_sources``. Ratings for unknown
+        wines are counted and skipped. Re-running is safe (keyed on the rating id).
+        """
+        stats = RatingStats()
+        wine_ids: Dict[Tuple[str, str], int] = {}
+        vintage_ids: Dict[Tuple[int, Optional[int]], int] = {}
+        sources: Set[str] = set()
+        pending = 0
+        try:
+            for raw in ratings:
+                r = normalize_user_rating(raw)
+                if r is None:
+                    stats.invalid += 1
+                    continue
+                if r.source not in sources:
+                    sources.add(r.source)
+                    for row in self.conn.execute(
+                        """SELECT external_id, wine_id FROM wine_sources
+                           WHERE source_name = ? AND external_id IS NOT NULL""",
+                        (r.source,),
+                    ):
+                        wine_ids[(r.source, row["external_id"])] = row["wine_id"]
+                wine_id = wine_ids.get((r.source, r.wine_external_id))
+                if wine_id is None:
+                    stats.unknown_wine += 1
+                    continue
+
+                vintage_id = None
+                if r.non_vintage or r.vintage is not None:
+                    key = (wine_id, r.vintage)  # vintage None here = the N.V. row
+                    if key not in vintage_ids:
+                        vintage_ids[key] = self.get_vintage_id(wine_id, r.vintage)
+                    vintage_id = vintage_ids[key]
+
+                self.conn.execute(
+                    """INSERT INTO user_ratings
+                         (source, user_id, wine_id, vintage_id, score, scale, rated_at, external_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(source, external_id) WHERE external_id IS NOT NULL
+                       DO UPDATE SET score = excluded.score, scale = excluded.scale,
+                                     vintage_id = excluded.vintage_id,
+                                     rated_at = excluded.rated_at""",
+                    (
+                        r.source,
+                        r.user_id,
+                        wine_id,
+                        vintage_id,
+                        r.score,
+                        r.scale,
+                        r.rated_at,
+                        r.external_id,
+                    ),
+                )
+                stats.loaded += 1
+                pending += 1
+                if pending >= commit_every:
+                    self.conn.commit()
+                    pending = 0
+            for source in sources:
+                self.refresh_user_rating_averages(source)
+            self.conn.commit()
+        except Exception as exc:
+            self.conn.rollback()
+            self._load_caches()
+            raise RuntimeError(f"User-rating ingest failed: {exc}") from exc
+
+        LOG.info(
+            "User ratings: %d loaded, %d for unknown wines, %d invalid",
+            stats.loaded,
+            stats.unknown_wine,
+            stats.invalid,
+        )
+        return stats
+
+    def refresh_user_rating_averages(self, source: str):
+        """Rebuild the per-wine average of ``source``'s user ratings in wine_ratings.
+
+        Stored with ``source = '<source> users'``, ``vintage_id`` NULL (all years),
+        ``rating_count`` = number of ratings, so it sits beside critic scores.
+        """
+        label = f"{source} users"
+        self.conn.execute("DELETE FROM wine_ratings WHERE source = ?", (label,))
+        self.conn.execute(
+            """INSERT INTO wine_ratings (wine_id, vintage_id, score, scale, rating_count, source)
+               SELECT wine_id, NULL, ROUND(AVG(score * 1.0 / scale) * MAX(scale), 3),
+                      MAX(scale), COUNT(*), ?
+               FROM user_ratings WHERE source = ? GROUP BY wine_id""",
+            (label, source),
+        )

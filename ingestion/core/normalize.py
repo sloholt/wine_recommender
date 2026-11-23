@@ -21,7 +21,16 @@ import unicodedata
 from dataclasses import replace
 from typing import Any, Iterable, List, Optional
 
-from .models import Aroma, Grape, Price, Rating, Sensory, Source, WineRecord
+from .models import (
+    Aroma,
+    Grape,
+    Price,
+    Rating,
+    Sensory,
+    Source,
+    UserRating,
+    WineRecord,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -32,6 +41,7 @@ LOG = logging.getLogger(__name__)
 _NULL_STRINGS = {"nan", "none", "null", "n/a"}
 _MOJIBAKE_HINTS = ("Ã", "Â", "â€")
 _TAG_RE = re.compile(r"<[^>]+>")
+_ZERO_WIDTH_RE = re.compile("[​‌‍⁠﻿]")
 
 
 def fix_mojibake(text: str) -> str:
@@ -58,6 +68,7 @@ def clean_text(value: Any) -> Optional[str]:
     text = html.unescape(str(value))
     text = fix_mojibake(text)
     text = unicodedata.normalize("NFC", text)
+    text = _ZERO_WIDTH_RE.sub("", text)  # 'Ugni​ blanc' -> 'Ugni blanc'
     text = re.sub(r"\s+", " ", text).strip()
     if not text or text.casefold() in _NULL_STRINGS:
         return None
@@ -243,7 +254,15 @@ COUNTRY_ALIASES = {
     "u s a": "United States",
     "united states of america": "United States",
     "uk": "United Kingdom",
+    "u k": "United Kingdom",
     "great britain": "United Kingdom",
+    "england": "United Kingdom",
+    "scotland": "United Kingdom",
+    "wales": "United Kingdom",
+    "the republic of south africa": "South Africa",
+    "republic of south africa": "South Africa",
+    "korea": "South Korea",
+    "republic of korea": "South Korea",
     "czechia": "Czech Republic",
     "north macedonia": "Macedonia",
     "republic of moldova": "Moldova",
@@ -256,6 +275,7 @@ COUNTRY_ISO = {
     "Armenia": "AM",
     "Australia": "AU",
     "Austria": "AT",
+    "Azerbaijan": "AZ",
     "Belgium": "BE",
     "Bolivia": "BO",
     "Bosnia and Herzegovina": "BA",
@@ -309,7 +329,7 @@ COUNTRY_ISO = {
     "Tunisia": "TN",
     "Turkey": "TR",
     "Ukraine": "UA",
-    "United Kingdom": "GB",
+    "United Kingdom": "UK",  # project convention (X-Wines also uses UK), not ISO's GB
     "United States": "US",
     "Uruguay": "UY",
     "Venezuela": "VE",
@@ -442,10 +462,66 @@ def _clean_sensory(s: Optional[Sensory]) -> Optional[Sensory]:
     return None if cleaned.is_empty() else cleaned
 
 
+# Different names for the same grape -> one standard name, so every source
+# shares one row in ``grapes``. Only true synonyms, not related varieties.
+GRAPE_SYNONYMS = {
+    "shiraz": "Syrah",
+    "syrah shiraz": "Syrah",
+    "syrah and shiraz": "Syrah",
+    "grenache noir": "Grenache",
+    "cot": "Malbec",
+    "white riesling": "Riesling",
+    "petite verdot": "Petit Verdot",
+    "rousaanne": "Roussanne",  # misspelling in the Kaggle wine-information data
+    "moscato": "Muscat",
+    "muscatel": "Muscat",
+    "muscat moscato": "Muscat",
+    "muscat muscatel": "Muscat",
+    "sylvaner": "Silvaner",
+    "silvaner sylvaner": "Silvaner",
+    "garnacha": "Grenache",
+    "carinena": "Carignan",
+    "mazuelo": "Carignan",
+    "carignan carinena": "Carignan",
+    "prosecco": "Glera",
+    "glera prosecco": "Glera",
+    "pinot grigio": "Pinot Gris",
+    "pinot bianco": "Pinot Blanc",
+    "weissburgunder": "Pinot Blanc",
+    "grauburgunder": "Pinot Gris",
+    "spatburgunder": "Pinot Noir",
+    "mourvedre": "Mourvèdre",
+    "monastrell": "Mourvèdre",
+    "rolle rollo": "Rolle",
+    "friulano sauvignonasse": "Friulano",
+    "pais mission": "País",
+}
+
+
+def canonical_grape(name: Optional[str]) -> Optional[str]:
+    """Standard grape name. 'Syrah/Shiraz' -> 'Syrah'; 'Muscat/Moscato Bianco' -> 'Moscato Bianco'.
+
+    For other 'A/B' names, the specific name after a generic 'Muscat/' prefix is
+    kept (it identifies the sub-variety); otherwise the first name is used.
+    """
+    name = clean_text(name)
+    if not name:
+        return None
+    synonym = GRAPE_SYNONYMS.get(fold(name))
+    if synonym:
+        return synonym
+    if "/" in name:
+        first, _, rest = (part.strip() for part in name.partition("/"))
+        if fold(first) == "muscat" and rest:
+            return rest
+        return GRAPE_SYNONYMS.get(fold(first)) or first or rest or None
+    return name
+
+
 def _clean_grapes(grapes: Iterable[Grape]) -> List[Grape]:
     seen, result = set(), []
     for g in grapes or []:
-        name = clean_text(g.name)
+        name = canonical_grape(g.name)
         key = fold(name) or (name or "").casefold()
         if not name or key in seen:
             continue
@@ -466,6 +542,45 @@ def _clean_aromas(aromas: Iterable[Aroma]) -> List[Aroma]:
             Aroma(name, clean_text(a.category), to_float(a.intensity, 0, 100))
         )
     return result
+
+
+def _clean_pairings(foods: Iterable[Any]) -> List[str]:
+    from .food import normalize_food  # local import: food.py imports this module
+
+    seen, result = set(), []
+    for item in foods or []:
+        name = normalize_food(item)
+        key = fold(name) or (name or "").casefold()
+        if name and key not in seen:
+            seen.add(key)
+            result.append(name)
+    return result
+
+
+def normalize_user_rating(r: UserRating) -> Optional[UserRating]:
+    """Cleaned copy of a user rating, or None if it is unusable."""
+    source = clean_text(r.source)
+    user_id = clean_text(r.user_id)
+    wine_id = clean_text(r.wine_external_id)
+    scale = to_float(r.scale, 0)
+    score = to_float(r.score, 0)
+    if not (source and user_id and wine_id) or not scale or score is None:
+        return None
+    if score > scale:
+        return None
+    non_vintage = bool(r.non_vintage)
+    vintage = None if non_vintage else clean_vintage(r.vintage)
+    return UserRating(
+        source=source,
+        user_id=user_id,
+        wine_external_id=wine_id,
+        score=score,
+        scale=scale,
+        vintage=vintage,
+        non_vintage=non_vintage,
+        rated_at=clean_text(r.rated_at),
+        external_id=clean_text(r.external_id),
+    )
 
 
 # --------------------------------------------------------------------------
@@ -510,13 +625,15 @@ def normalize_wine(rec: WineRecord) -> Optional[WineRecord]:
         region=clean_text(rec.region),
         style=normalize_style(rec.style) or normalize_style(rec.color),
         color=normalize_color(rec.color),
-        varietal=clean_text(rec.varietal),
+        varietal=canonical_grape(rec.varietal),
+        blend_type=clean_text(rec.blend_type),
         abv=to_float(rec.abv, 0, 100),
         closure=clean_text(rec.closure),
         vintages=vintages,
         grapes=_clean_grapes(rec.grapes),
         aromas=_clean_aromas(rec.aromas),
         sensory=_clean_sensory(rec.sensory),
+        pairings=_clean_pairings(rec.pairings),
         ratings=ratings,
         prices=prices,
         sources=sources,
