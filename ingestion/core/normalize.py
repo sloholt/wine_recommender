@@ -243,6 +243,21 @@ def normalize_style(value: Any) -> Optional[str]:
     return STYLES.get(fold(text))
 
 
+# Words on a label / in a title that mark a sparkling wine even when the grape
+# does not ("Jean Josselin NV Cordon Royal Brut Pinot Noir (Champagne)").
+# Match against fold()ed text. Shared by the importers and the label extractor.
+SPARKLING_CUES = re.compile(
+    r"\b(champagne|brut|sparkling|cremant|cava|spumante|franciacorta|sekt"
+    r"|mousseux|methode traditionnelle|methode champenoise|metodo classico"
+    r"|extra dry|pet nat|petillant naturel|frizzante|prosecco|perlwein|espumante)\b"
+)
+
+
+def is_sparkling_text(text: Optional[str]) -> bool:
+    """True if the text names a sparkling wine ('Brut', 'Crémant', 'Prosecco', ...)."""
+    return bool(SPARKLING_CUES.search(fold(text)))
+
+
 def split_style_color(value: Any):
     """'Sparkling' -> ('Sparkling', None); 'Red' -> (None, 'Red'); 'Dessert/Port' -> ('Dessert', None)."""
     return normalize_style(value), normalize_color(value)

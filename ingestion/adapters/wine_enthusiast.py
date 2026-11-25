@@ -34,7 +34,14 @@ from typing import Iterator, List, Optional, Tuple
 
 from ..core.models import Grape, Price, Rating, Source, WineRecord
 from ..core.naming import derive_color, is_non_vintage
-from ..core.normalize import clean_note, clean_text, clean_vintage, fold, to_float
+from ..core.normalize import (
+    SPARKLING_CUES,
+    clean_note,
+    clean_text,
+    clean_vintage,
+    fold,
+    to_float,
+)
 from ..core.tasting import parse_tasting_note
 
 LOG = logging.getLogger(__name__)
@@ -82,12 +89,7 @@ VARIETY_GRAPES = {
     "gros and petit manseng": ["Gros Manseng", "Petit Manseng"],
 }
 SPARKLING_VARIETIES = {"prosecco", "glera"}
-# Title / region words that mark a sparkling wine whose variety does not say so
-# ("Jean Josselin NV Cordon Royal Brut Pinot Noir (Champagne)").
-_SPARKLING_CUES = re.compile(
-    r"\b(champagne|brut|sparkling|cremant|cava|spumante|franciacorta|sekt"
-    r"|mousseux|methode traditionnelle|extra dry|pet nat)\b"
-)
+# Title / region words marking a sparkling wine: SPARKLING_CUES (core/normalize.py).
 
 _LEADING_YEAR = re.compile(r"^(?P<y>(?:18|19|20)\d{2})(?!\d)\s*")
 _LEADING_NV = re.compile(r"^(?:NV|N\.V\.)(?=\s|$)\s*", re.IGNORECASE)
@@ -164,7 +166,7 @@ def read_records(path=DEFAULT_PATH) -> Iterator[WineRecord]:
             if region and country and fold(region) == fold(country):
                 region = None
 
-            if style is None and _SPARKLING_CUES.search(fold(f"{title} {region or ''}")):
+            if style is None and SPARKLING_CUES.search(fold(f"{title} {region or ''}")):
                 style = "Sparkling"
 
             note = clean_note(row.get("description"))

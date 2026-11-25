@@ -1,10 +1,21 @@
-"""Step 5: review analytics -> flavor profile per wine, lift (flavor x grape), and topics.
+"""Step 5: review analytics -> per-wine flavor profiles, lift (flavor x grape), topics.
 
-Requires Step 4 (catalog). These outputs feed slides 4-5.
+Builds everything from the wine database (Step 4, data/wines.db):
+
+  5a. Flavor profiles: one vector per wine from its aromas (wine_aromas) and
+      sensory scores (wine_sensory); wines without a tasting note borrow their
+      grape + region group's profile. Saved to artifacts/flavor_profiles/ and
+      used by the app through app.flavor_profiles.FlavorProfiles.
+  5b. Lift: which aromas are characteristic of each grape (table + heatmap, slides 4-5).
+  5c. Topics (optional, --topics): LDA themes over the review text, for the slides.
+
+The aromas and sensory scores are extracted from tasting notes during ingestion
+(ingestion/core/tasting.py), so the text is parsed once, with one vocabulary.
 
 Run from the project folder:
     python -m app.review_analytics
-    python -m app.review_analytics --catalog data/other_catalog.csv
+    python -m app.review_analytics --topics                  # also the LDA topics
+    python -m app.review_analytics --topics --source "Wine Enthusiast"
 """
 
 import argparse
@@ -20,8 +31,11 @@ import pandas as pd
 from sklearn.decomposition import LatentDirichletAllocation
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, CountVectorizer
 
+from app.flavor_profiles import PROFILE_DIR, build_profiles
+from database import repository as repo
+from database.connection import DATABASE_PATH
+
 ARTIFACT_DIR = Path("artifacts")
-DEFAULT_CATALOG = Path("data") / "wines.csv"
 SEED = 42
 
 # Words that appear in nearly every review and carry no flavor information.
@@ -59,180 +73,14 @@ WINE_STOP = {
 }
 STOP_WORDS = list(ENGLISH_STOP_WORDS | WINE_STOP)
 
-# Flavor vocabulary: the descriptors tasters use. Edit freely.
-FLAVOR_TERMS = [
-    # fruit
-    "cherry",
-    "black cherry",
-    "blackberry",
-    "raspberry",
-    "strawberry",
-    "plum",
-    "cassis",
-    "black currant",
-    "cranberry",
-    "blueberry",
-    "fig",
-    "raisin",
-    "prune",
-    "citrus",
-    "lemon",
-    "lime",
-    "grapefruit",
-    "orange",
-    "apple",
-    "green apple",
-    "pear",
-    "peach",
-    "apricot",
-    "nectarine",
-    "pineapple",
-    "tropical",
-    "melon",
-    "passion fruit",
-    "mango",
-    "lychee",
-    # oak and aging
-    "oak",
-    "vanilla",
-    "toast",
-    "toasty",
-    "smoke",
-    "smoky",
-    "cedar",
-    "tobacco",
-    "leather",
-    "chocolate",
-    "cocoa",
-    "coffee",
-    "espresso",
-    "mocha",
-    "caramel",
-    "butter",
-    "buttery",
-    "cream",
-    "brioche",
-    "almond",
-    "hazelnut",
-    "honey",
-    # earth, herb, spice
-    "earth",
-    "earthy",
-    "mineral",
-    "minerality",
-    "flint",
-    "graphite",
-    "slate",
-    "mushroom",
-    "forest floor",
-    "herb",
-    "herbal",
-    "sage",
-    "thyme",
-    "mint",
-    "eucalyptus",
-    "grass",
-    "grassy",
-    "bell pepper",
-    "olive",
-    "pepper",
-    "black pepper",
-    "spice",
-    "clove",
-    "cinnamon",
-    "licorice",
-    "anise",
-    "floral",
-    "violet",
-    "rose",
-    "petrol",
-    "gamey",
-    "meaty",
-    # structure
-    "tannic",
-    "firm tannins",
-    "soft tannins",
-    "acidity",
-    "crisp",
-    "zesty",
-    "juicy",
-    "jammy",
-    "ripe",
-    "bold",
-    "rich",
-    "lush",
-    "light",
-    "elegant",
-    "smooth",
-    "silky",
-    "sweet",
-    "dry",
-    "tart",
-]
-
 N_TOP_VARIETIES = 8
-MIN_SUPPORT = 20  # term must appear in at least this many wines of the grape
+MIN_SUPPORT = 20  # aroma must appear in at least this many wines of the grape
 N_TOPICS = 8
 
 
-def load_catalog(path: Path) -> pd.DataFrame:
-    """Load the Step 4 catalog from .csv, .parquet or .pkl."""
-    suffix = path.suffix.lower()
-    if suffix == ".csv":
-        catalog = pd.read_csv(path)
-    elif suffix == ".parquet":
-        catalog = pd.read_parquet(path)
-    elif suffix in (".pkl", ".pickle"):
-        catalog = pd.read_pickle(path)
-    else:
-        raise ValueError(f"Unsupported catalog format: {path.suffix}")
-
-    # Datasets like WineEnthusiast name the review text "description".
-    if "review" not in catalog.columns and "description" in catalog.columns:
-        catalog = catalog.rename(columns={"description": "review"})
-
-    missing = {"review", "variety"} - set(catalog.columns)
-    if missing:
-        raise ValueError(
-            f"Catalog is missing required columns: {sorted(missing)}. "
-            f"Columns found: {list(catalog.columns)}"
-        )
-    catalog = catalog.dropna(subset=["variety"]).reset_index(drop=True)
-    catalog["review"] = catalog["review"].fillna("").astype(str)
-    return catalog
-
-
-# ---- 5a. Flavor presence per wine ------------------------------------------------
-def add_flavor_profiles(catalog: pd.DataFrame):
-    flavor_vec = CountVectorizer(
-        vocabulary=FLAVOR_TERMS, ngram_range=(1, 2), binary=True, lowercase=True
-    )
-    F = flavor_vec.fit_transform(
-        catalog["review"]
-    ).tocsr()  # wines x flavor terms (0/1)
-    flavor_names = np.array(flavor_vec.get_feature_names_out())
-
-    # Keep each wine's flavor words, rarest first (rare words are more distinctive).
-    term_share = np.asarray(F.mean(axis=0)).ravel()
-    rarity_rank = np.argsort(np.argsort(term_share))  # 0 = rarest term
-    catalog["flavors"] = [
-        [
-            flavor_names[j]
-            for j in sorted(
-                F.indices[F.indptr[i] : F.indptr[i + 1]], key=rarity_rank.__getitem__
-            )
-        ][:8]
-        for i in range(F.shape[0])
-    ]
-    print(
-        "Wines with at least one flavor term:",
-        f"{(np.asarray(F.sum(axis=1)).ravel() > 0).mean():.0%}",
-    )
-    return F, flavor_names, term_share
-
-
-# ---- 5b. Lift: which flavor words are characteristic of each grape? --------------
-# lift = P(term | grape) / P(term). Lift 3 = the word shows up 3x more often for that grape.
+# ---- 5b. Lift: which aromas are characteristic of each grape? ------------------
+# lift = P(aroma | grape) / P(aroma), over wines with at least one aroma.
+# Lift 3 = the aroma shows up 3x more often for that grape.
 def compute_lift(catalog, F, flavor_names, term_share, out_dir: Path) -> pd.DataFrame:
     top_varieties = (
         catalog["variety"].value_counts().head(N_TOP_VARIETIES).index.tolist()
@@ -285,7 +133,7 @@ def compute_lift(catalog, F, flavor_names, term_share, out_dir: Path) -> pd.Data
         if not np.isnan(v):
             ax.text(c, r, f"{v:.1f}", ha="center", va="center", fontsize=8)
     fig.colorbar(im, ax=ax, label="lift")
-    ax.set_title("Which flavor words define each grape (lift)")
+    ax.set_title("Which aromas define each grape (lift)")
     fig.tight_layout()
     fig.savefig(out_dir / "flavor_lift_heatmap.png", dpi=200)
     plt.close(fig)
@@ -293,7 +141,7 @@ def compute_lift(catalog, F, flavor_names, term_share, out_dir: Path) -> pd.Data
 
 
 # ---- 5c. Topics (LDA): flavor themes across all reviews --------------------------
-def add_topics(catalog: pd.DataFrame) -> dict:
+def add_topics(catalog: pd.DataFrame, out_dir: Path) -> dict:
     count_vec = CountVectorizer(
         stop_words=STOP_WORDS,
         max_df=0.4,
@@ -318,6 +166,9 @@ def add_topics(catalog: pd.DataFrame) -> dict:
     for t, words in topic_words.items():
         print(f"Topic {t}: {', '.join(words)}")
     catalog["topic"] = doc_topics.argmax(axis=1)
+    pd.DataFrame(
+        {"topic": list(topic_words), "top_words": [", ".join(w) for w in topic_words.values()]}
+    ).to_csv(out_dir / "topic_words.csv", index=False)
     # Tip: after reading the word lists, give each topic a short name for the slides, e.g.
     # TOPIC_NAMES = {0: "dark fruit & oak", 1: "citrus & minerals", ...}
     return topic_words
@@ -325,44 +176,74 @@ def add_topics(catalog: pd.DataFrame) -> dict:
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Step 5: flavor profiles, lift and topics from wine reviews."
-    )
-    parser.add_argument(
-        "--catalog",
-        type=Path,
-        default=DEFAULT_CATALOG,
-        help=f"Step 4 catalog file (.csv/.parquet/.pkl). Default: {DEFAULT_CATALOG}",
+        description="Step 5: flavor profiles, lift and topics from the wine database."
     )
     parser.add_argument(
         "--out-dir",
         type=Path,
         default=ARTIFACT_DIR,
-        help=f"Where outputs are saved (default: {ARTIFACT_DIR})",
+        help=f"Where lift/topic outputs are saved (default: {ARTIFACT_DIR})",
+    )
+    parser.add_argument(
+        "--profiles-dir",
+        type=Path,
+        default=PROFILE_DIR,
+        help=f"Where the flavor profiles are saved (default: {PROFILE_DIR})",
+    )
+    parser.add_argument(
+        "--topics", action="store_true", help="Also fit LDA topics on the review text (slower)"
+    )
+    parser.add_argument(
+        "--source",
+        default=None,
+        help="With --topics: only use reviews from this source, e.g. 'Wine Enthusiast'",
     )
     args = parser.parse_args(argv)
 
-    if not args.catalog.exists():
+    if not DATABASE_PATH.exists():
         parser.error(
-            f"catalog not found: {args.catalog} (run Step 4 first, or pass --catalog)"
+            f"database not found: {DATABASE_PATH} (build it with `python -m ingestion.run`)"
         )
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
-    catalog = load_catalog(args.catalog)
-    print(f"Loaded {len(catalog):,} wines from {args.catalog}")
-
-    F, flavor_names, term_share = add_flavor_profiles(catalog)
-    compute_lift(catalog, F, flavor_names, term_share, args.out_dir)
-    add_topics(catalog)
-
-    # Save the enriched catalog so later steps can use the flavors and topics.
-    # Pickle keeps the 'flavors' column as real Python lists.
-    enriched_path = args.out_dir / "catalog_with_flavors.pkl"
-    catalog.to_pickle(enriched_path)
-
+    # 5a. Flavor profiles
+    profiles = build_profiles()
+    info = profiles.info
     print(
-        f"\nSaved to {args.out_dir}: flavor_lift.csv, flavor_lift_heatmap.png, {enriched_path.name}",
-        file=sys.stderr,
+        f"Built flavor profiles for {info['n_wines']:,} wines "
+        f"({info['n_own_profiles']:,} from their own tasting data)."
     )
+    for source, count in info["profile_sources"].items():
+        print(f"  {source:<16} {count:>8,}")
+    profiles.save(args.profiles_dir)
+
+    # 5b. Lift, over wines with at least one aroma
+    has_aroma = (profiles.meta["n_aromas"] > 0).to_numpy()
+    catalog = profiles.meta[has_aroma].reset_index(drop=True)
+    F = profiles.aroma_presence[has_aroma].tocsr()
+    aroma_names = np.array(
+        [f.split(":", 1)[1] for f in profiles.feature_names if f.startswith("aroma:")]
+    )
+    term_share = np.asarray(F.mean(axis=0)).ravel()
+    compute_lift(catalog, F, aroma_names, term_share, args.out_dir)
+
+    # Sanity check: look-alikes for the most-rated wine with its own profile.
+    own = profiles.meta[profiles.meta["profile_source"] == "own"]
+    example = own.loc[own["n_user_ratings"].idxmax()]
+    print(f"\nExample - wines similar to {example.title} ({example.variety}):")
+    similar = profiles.similar(int(example.wine_id), k=5)
+    print(similar[["title", "variety", "similarity", "match"]].to_string(index=False))
+
+    # 5c. Topics (optional)
+    if args.topics:
+        reviews = repo.get_reviews(source=args.source)
+        reviews["review"] = reviews["review"].fillna("").astype(str)
+        print(f"\nFitting topics on {len(reviews):,} reviews")
+        add_topics(reviews, args.out_dir)
+
+    saved = ["flavor_lift.csv", "flavor_lift_heatmap.png"] + (["topic_words.csv"] if args.topics else [])
+    print(f"\nSaved to {args.out_dir}: {', '.join(saved)}", file=sys.stderr)
+    print(f"Saved flavor profiles to {args.profiles_dir}", file=sys.stderr)
     return 0
 
 

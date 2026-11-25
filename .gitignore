@@ -51,6 +51,7 @@ artifacts/*.joblib
 artifacts/*.pickle
 artifacts/*.npy
 artifacts/*.npz
+artifacts/flavor_profiles/
 
 # ==========================================
 # JUPYTER NOTEBOOKS

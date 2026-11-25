@@ -24,9 +24,10 @@ import sys
 import re
 import unicodedata
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 import argparse
 from app.matching import match_key
+from ingestion.core.normalize import is_sparkling_text
 
 
 import anthropic
@@ -66,6 +67,16 @@ class WineLabel(BaseModel):
     variety: Optional[str] = Field(
         None, description="Grape variety or blend, e.g. 'Chardonnay'"
     )
+    color: Optional[Literal["Red", "White", "Rosé", "Orange"]] = Field(
+        None,
+        description="Wine color. May be inferred from the variety, appellation or bottle (e.g. Sancerre Blanc -> White).",
+    )
+    style: Optional[Literal["Still", "Sparkling", "Dessert", "Fortified"]] = Field(
+        None,
+        description="Sparkling if the label says Champagne, Brut, Crémant, Cava, Prosecco, Sekt, Spumante, "
+        "Méthode Traditionnelle, Pét-Nat, etc. Dessert for late harvest / Sauternes / ice wine; "
+        "Fortified for Port, Sherry, Madeira. Otherwise Still.",
+    )
     vintage: Optional[int] = Field(None, description="Harvest year, e.g. 2023")
     abv: Optional[float] = Field(
         None, description="Alcohol by volume in percent, e.g. 13.5"
@@ -96,6 +107,7 @@ Field rules:
   anywhere (inferred values) may use their common English name.
 - Ignore marketing copy, slogans and legal boilerplate.
 - You MAY infer country, region or variety when the appellation fixes them. List a field in inferred_fields ONLY if its value is not printed anywhere on the label.
+- Always give color and style when you can tell them from the label, the appellation or the bottle in the photo (style is Still unless the label marks it Sparkling, Dessert or Fortified). They are usually inferred: list them in inferred_fields unless the word itself (e.g. 'Rosé', 'Brut') is printed.
 - NEVER invent a vintage, alcohol %, or bottle size. If you cannot read them, use null. If a number is partly hidden, use null rather than guessing.
 - ocr_corrections: only list confident fixes of a misread word. Leave it empty for fragments you cannot resolve; do not explain fragments.
 - Use null for anything you cannot determine.
@@ -226,6 +238,8 @@ def enforce_printed_text(record: WineLabel, raw_text: str) -> list[str]:
     1. Region: if Claude translated a printed region (e.g. 'Limarí Valley'), replace it with
        the printed form from the appellation ('Valle del Limarí').
     0. ocr_corrections: drop no-op entries like "CONTROLEE -> CONTROLEE" or "97 -> null".
+    3. Style: a sparkling term printed on the label (Brut, Crémant, Prosecco...) sets
+       style to Sparkling, so the recommender never treats a Champagne as still wine.
     2. inferred_fields: country, region and variety are listed only if their value is NOT
        printed on the label (checked against the OCR text and the fields read from the photo).
     """
@@ -260,6 +274,11 @@ def enforce_printed_text(record: WineLabel, raw_text: str) -> list[str]:
                 f"region '{record.region}' -> '{printed_region}' (printed form)"
             )
             record.region = printed_region
+
+    # 3. Sparkling words printed on the label decide the style, whatever Claude said.
+    if record.style != "Sparkling" and is_sparkling_text(printed):
+        changes.append(f"style '{record.style}' -> 'Sparkling' (sparkling term printed on the label)")
+        record.style = "Sparkling"
 
     # 2. Rebuild inferred_fields from the evidence, not from Claude's claim
     inferred = set(record.inferred_fields) & set(WineLabel.model_fields)
@@ -350,10 +369,12 @@ DEMO_LABEL = {
     "country": "Chile",
     "region": "Valle del Limarí",
     "variety": "Chardonnay",
+    "color": "White",
+    "style": "Still",
     "vintage": 2023,
     "abv": None,
     "volume_ml": 750,
-    "inferred_fields": ["country"],
+    "inferred_fields": ["country", "color", "style"],
     "ocr_corrections": [],
 }
 
@@ -377,9 +398,14 @@ def extract_label_from_photo(photo_path):
 
 
 def to_label_record(extraction_output):
-    """Six-field handoff (plus country) for the matching/recommender sections."""
+    """Six-field handoff (plus country, color, style) for the matching/recommender sections.
+
+    color and style feed FlavorProfiles.profile_for() / similar() for wines that
+    are not in the database.
+    """
     label_record = {key: extraction_output[key] for key in HANDOFF_FIELDS}
-    label_record["country"] = extraction_output.get("country")
+    for key in ("country", "color", "style"):
+        label_record[key] = extraction_output.get(key)
     return label_record
 
 
