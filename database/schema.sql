@@ -102,7 +102,8 @@ CREATE TABLE wine_aromas (
     wine_id        INTEGER NOT NULL REFERENCES wines(wine_id),
     aroma_category TEXT,
     aroma_name     TEXT NOT NULL,
-    intensity      REAL,
+    intensity      REAL,  -- share (0-1) of the wine's reviews mentioning it; set by
+                          -- ingestion/reparse_aromas.py. NULL = wine has no reviews
     UNIQUE (wine_id, aroma_name)
 );
 
