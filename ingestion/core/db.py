@@ -80,6 +80,10 @@ def _key(text: Optional[str]) -> str:
     return fold(text) or (text or "").casefold()
 
 
+def _accent_count(text: str) -> int:
+    return sum(ord(ch) > 127 for ch in text)
+
+
 @dataclass
 class IngestStats:
     created: int = 0  # new wines
@@ -202,10 +206,16 @@ class WineDB:
 
         # winery name key -> {region_id (0 = unknown): winery_id}
         self._wineries: Dict[str, Dict[int, int]] = {}
+        # winery name key -> the spelling already stored ("Château d'Esclans"), so a
+        # new row for another region of a known producer reuses it instead of the
+        # record's spelling ("Chateau d'Esclans"). Prefers the accented spelling.
+        self._winery_names: Dict[str, str] = {}
         for r in c.execute("SELECT winery_id, name, region_id FROM wineries"):
-            self._wineries.setdefault(_key(r["name"]), {})[r["region_id"] or 0] = r[
-                "winery_id"
-            ]
+            key = _key(r["name"])
+            self._wineries.setdefault(key, {})[r["region_id"] or 0] = r["winery_id"]
+            known = self._winery_names.get(key)
+            if known is None or _accent_count(r["name"]) > _accent_count(known):
+                self._winery_names[key] = r["name"]
 
         self._grapes: Dict[str, int] = {}
         for r in c.execute("SELECT grape_id, name FROM grapes"):
@@ -338,8 +348,9 @@ class WineDB:
 
         self._winery_created = winery_id is None
         if winery_id is None:
+            spelling = self._winery_names.setdefault(_key(name), name)
             winery_id = self._insert(
-                "wineries", {"name": name, "region_id": region_id, "website": website}
+                "wineries", {"name": spelling, "region_id": region_id, "website": website}
             )
             by_region[region_key] = winery_id
         else:

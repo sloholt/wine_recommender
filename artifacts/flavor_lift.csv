@@ -1,0 +1,619 @@
+variety,term,lift,share_of_grape,n_wines
+Pinot Noir,persimmon,7.64,0.019,149
+Pinot Noir,rhubarb,6.35,0.051,393
+Pinot Noir,pomegranate,5.93,0.088,673
+Pinot Noir,hibiscus,5.54,0.018,136
+Pinot Noir,pine,5.45,0.013,103
+Pinot Noir,cardamom,4.85,0.026,198
+Pinot Noir,sandalwood,4.52,0.052,400
+Pinot Noir,cranberry,4.37,0.157,1206
+Pinot Noir,cola,4.25,0.19,1462
+Pinot Noir,mushroom,4.17,0.059,457
+Pinot Noir,tea,4.13,0.09,689
+Pinot Noir,iron,3.96,0.024,185
+Pinot Noir,allspice,3.92,0.016,120
+Pinot Noir,mulberry,3.43,0.014,108
+Pinot Noir,strawberry,3.28,0.172,1319
+Pinot Noir,forest floor,3.17,0.033,253
+Pinot Noir,slate,2.89,0.026,203
+Pinot Noir,thyme,2.79,0.034,265
+Pinot Noir,raspberry,2.76,0.306,2354
+Pinot Noir,rose,2.65,0.08,615
+Pinot Noir,scrub,2.55,0.003,22
+Pinot Noir,eucalyptus,2.47,0.019,146
+Pinot Noir,cherry,2.38,0.532,4093
+Pinot Noir,bark,2.24,0.008,63
+Pinot Noir,sour cherry,2.23,0.022,171
+Pinot Noir,red fruit,2.22,0.094,724
+Pinot Noir,incense,2.19,0.006,45
+Pinot Noir,lavender,2.15,0.02,152
+Pinot Noir,redcurrant,2.1,0.043,332
+Pinot Noir,cinnamon,2.05,0.084,642
+Pinot Noir,earth,2.01,0.213,1639
+Pinot Noir,bergamot,1.87,0.003,20
+Pinot Noir,pencil shavings,1.87,0.018,139
+Pinot Noir,nutmeg,1.76,0.023,177
+Pinot Noir,rosemary,1.61,0.008,64
+Pinot Noir,black cherry,1.54,0.129,991
+Pinot Noir,brambleberry,1.53,0.011,86
+Pinot Noir,graphite,1.51,0.024,187
+Pinot Noir,smoke,1.49,0.124,954
+Pinot Noir,clove,1.48,0.066,510
+Pinot Noir,sage,1.42,0.027,211
+Pinot Noir,oak,1.34,0.243,1867
+Pinot Noir,truffle,1.29,0.009,72
+Pinot Noir,spice,1.16,0.319,2450
+Pinot Noir,mint,1.16,0.036,279
+Pinot Noir,plum,1.1,0.173,1329
+Pinot Noir,cocoa,1.08,0.021,162
+Pinot Noir,licorice,1.08,0.094,721
+Pinot Noir,herbs,1.07,0.184,1412
+Pinot Noir,red berries,1.06,0.033,253
+Pinot Noir,orange,1.03,0.065,499
+Pinot Noir,violet,0.98,0.032,246
+Pinot Noir,boysenberry,0.98,0.013,103
+Pinot Noir,caramel,0.97,0.043,334
+Pinot Noir,granite,0.96,0.004,28
+Pinot Noir,currant,0.94,0.038,295
+Pinot Noir,pepper,0.94,0.118,907
+Pinot Noir,bread & pastry,0.93,0.018,137
+Pinot Noir,wood,0.9,0.059,451
+Pinot Noir,candied fruit,0.89,0.025,195
+Pinot Noir,meat,0.86,0.056,433
+Pinot Noir,coffee,0.86,0.075,573
+Pinot Noir,cedar,0.85,0.03,227
+Pinot Noir,olive,0.84,0.017,132
+Pinot Noir,chocolate,0.83,0.076,584
+Pinot Noir,ginger,0.81,0.008,61
+Pinot Noir,toast,0.81,0.095,731
+Pinot Noir,vanilla,0.8,0.09,694
+Pinot Noir,wild berries,0.71,0.011,84
+Pinot Noir,stone,0.69,0.024,188
+Pinot Noir,butter,0.68,0.015,113
+Pinot Noir,chalk,0.67,0.01,75
+Pinot Noir,minerals,0.65,0.077,593
+Pinot Noir,dark fruit,0.63,0.041,314
+Pinot Noir,tar,0.6,0.009,71
+Pinot Noir,flowers,0.58,0.064,490
+Pinot Noir,blueberry,0.53,0.02,155
+Pinot Noir,tobacco,0.51,0.028,214
+Pinot Noir,leather,0.48,0.026,200
+Pinot Noir,coconut,0.45,0.006,44
+Pinot Noir,salt,0.44,0.012,89
+Pinot Noir,balsamic,0.43,0.005,35
+Pinot Noir,blackberry,0.43,0.064,494
+Pinot Noir,nuts,0.4,0.009,70
+Pinot Noir,hazelnut,0.39,0.003,22
+Pinot Noir,citrus,0.34,0.04,304
+Pinot Noir,dried fruit,0.33,0.017,130
+Pinot Noir,white flowers,0.32,0.005,35
+Pinot Noir,flint,0.28,0.003,22
+Pinot Noir,grapefruit,0.2,0.009,70
+Pinot Noir,tangerine,0.2,0.005,39
+Pinot Noir,grass,0.19,0.003,26
+Pinot Noir,cassis,0.18,0.009,66
+Pinot Noir,almond,0.16,0.006,47
+Pinot Noir,blackcurrant,0.15,0.005,41
+Pinot Noir,apple,0.14,0.02,150
+Pinot Noir,stone fruit,0.13,0.003,25
+Pinot Noir,lemon,0.12,0.012,89
+Pinot Noir,lime,0.12,0.007,55
+Pinot Noir,melon,0.08,0.004,32
+Pinot Noir,honey,0.08,0.004,33
+Pinot Noir,peach,0.08,0.007,56
+Pinot Noir,tropical fruit,0.07,0.003,20
+Pinot Noir,pineapple,0.06,0.003,22
+Pinot Noir,apricot,0.06,0.003,22
+Pinot Noir,pear,0.05,0.005,35
+Chardonnay,creme brulee,7.32,0.024,173
+Chardonnay,apple pie,6.82,0.008,59
+Chardonnay,butter,5.7,0.123,880
+Chardonnay,kumquat,5.07,0.006,43
+Chardonnay,yellow fruit,4.9,0.06,426
+Chardonnay,pineapple,4.68,0.212,1517
+Chardonnay,oyster shell,4.09,0.008,59
+Chardonnay,mango,3.96,0.064,455
+Chardonnay,guava,3.9,0.021,147
+Chardonnay,tropical fruit,3.83,0.151,1078
+Chardonnay,lees,3.69,0.039,278
+Chardonnay,limestone,3.36,0.006,40
+Chardonnay,banana,3.34,0.035,247
+Chardonnay,pear,3.27,0.276,1975
+Chardonnay,apple,3.17,0.428,3057
+Chardonnay,papaya,3.16,0.025,178
+Chardonnay,pie crust,3.06,0.003,24
+Chardonnay,hazelnut,2.92,0.022,154
+Chardonnay,caramel,2.77,0.124,887
+Chardonnay,kiwi,2.75,0.018,131
+Chardonnay,quince,2.7,0.014,98
+Chardonnay,lemon,2.67,0.256,1832
+Chardonnay,salt,2.64,0.07,499
+Chardonnay,toast,2.55,0.3,2142
+Chardonnay,walnut,2.54,0.011,78
+Chardonnay,lemongrass,2.46,0.011,80
+Chardonnay,nuts,2.45,0.056,397
+Chardonnay,chalk,2.41,0.035,251
+Chardonnay,peach,2.39,0.232,1655
+Chardonnay,lime,2.37,0.143,1022
+Chardonnay,chamomile,2.34,0.008,57
+Chardonnay,apricot,2.34,0.11,784
+Chardonnay,flint,2.2,0.022,160
+Chardonnay,honeysuckle,2.2,0.033,233
+Chardonnay,bread & pastry,2.18,0.042,300
+Chardonnay,melon,2.11,0.103,738
+Chardonnay,orange blossom,2.1,0.009,67
+Chardonnay,honey,2.09,0.118,841
+Chardonnay,minerals,2.07,0.247,1762
+Chardonnay,nectarine,2.05,0.041,291
+Chardonnay,tangerine,2.01,0.051,368
+Chardonnay,vanilla,1.97,0.222,1590
+Chardonnay,citrus,1.95,0.227,1623
+Chardonnay,mandarin,1.94,0.006,44
+Chardonnay,orange,1.83,0.115,822
+Chardonnay,nutmeg,1.74,0.023,162
+Chardonnay,oak,1.73,0.313,2238
+Chardonnay,ginger,1.58,0.015,110
+Chardonnay,almond,1.53,0.059,424
+Chardonnay,stone,1.51,0.054,383
+Chardonnay,beeswax,1.47,0.017,123
+Chardonnay,wood,1.44,0.094,672
+Chardonnay,stone fruit,1.32,0.033,235
+Chardonnay,petrol,1.3,0.005,38
+Chardonnay,grapefruit,1.28,0.057,407
+Chardonnay,iodine,1.27,0.003,21
+Chardonnay,white flowers,1.15,0.017,118
+Chardonnay,coconut,1.15,0.015,104
+Chardonnay,flowers,0.94,0.104,746
+Chardonnay,slate,0.87,0.008,57
+Chardonnay,smoke,0.84,0.07,498
+Chardonnay,candied fruit,0.82,0.024,168
+Chardonnay,spice,0.71,0.196,1398
+Chardonnay,cinnamon,0.7,0.029,204
+Chardonnay,passion fruit,0.67,0.005,37
+Chardonnay,lychee,0.51,0.004,29
+Chardonnay,grass,0.35,0.006,44
+Chardonnay,dried fruit,0.3,0.015,109
+Chardonnay,sandalwood,0.28,0.003,23
+Chardonnay,herbs,0.27,0.047,335
+Chardonnay,mushroom,0.26,0.004,27
+Chardonnay,olive,0.21,0.004,30
+Chardonnay,clove,0.19,0.009,62
+Chardonnay,tea,0.17,0.004,27
+Chardonnay,earth,0.16,0.017,120
+Chardonnay,licorice,0.14,0.012,88
+Chardonnay,mint,0.14,0.004,31
+Chardonnay,plum,0.14,0.022,154
+Chardonnay,rose,0.12,0.004,27
+Chardonnay,meat,0.11,0.007,51
+Chardonnay,pepper,0.1,0.013,91
+Chardonnay,cedar,0.1,0.003,25
+Chardonnay,currant,0.09,0.003,25
+Cabernet Sauvignon,cassis,5.12,0.24,1353
+Cabernet Sauvignon,cedar,4.46,0.155,876
+Cabernet Sauvignon,blackcurrant,4.31,0.156,882
+Cabernet Sauvignon,pencil shavings,3.81,0.037,208
+Cabernet Sauvignon,cigar box,3.64,0.024,136
+Cabernet Sauvignon,currant,3.34,0.136,768
+Cabernet Sauvignon,olive,2.82,0.057,324
+Cabernet Sauvignon,blackberry,2.79,0.415,2341
+Cabernet Sauvignon,cocoa,2.61,0.051,286
+Cabernet Sauvignon,charcoal,2.58,0.005,29
+Cabernet Sauvignon,chocolate,2.57,0.234,1320
+Cabernet Sauvignon,green pepper,2.3,0.024,133
+Cabernet Sauvignon,tobacco,2.17,0.118,664
+Cabernet Sauvignon,graphite,2.15,0.035,196
+Cabernet Sauvignon,oak,2.09,0.378,2133
+Cabernet Sauvignon,bark,1.98,0.007,41
+Cabernet Sauvignon,blueberry,1.87,0.071,403
+Cabernet Sauvignon,coffee,1.86,0.161,910
+Cabernet Sauvignon,tar,1.81,0.028,156
+Cabernet Sauvignon,redcurrant,1.79,0.037,208
+Cabernet Sauvignon,herbs,1.78,0.306,1727
+Cabernet Sauvignon,smoke,1.76,0.146,826
+Cabernet Sauvignon,black cherry,1.71,0.143,809
+Cabernet Sauvignon,coconut,1.66,0.021,119
+Cabernet Sauvignon,eucalyptus,1.66,0.013,72
+Cabernet Sauvignon,cherry,1.59,0.356,2012
+Cabernet Sauvignon,clove,1.59,0.071,401
+Cabernet Sauvignon,dark fruit,1.57,0.102,577
+Cabernet Sauvignon,mint,1.5,0.047,266
+Cabernet Sauvignon,cranberry,1.45,0.052,293
+Cabernet Sauvignon,plum,1.42,0.223,1260
+Cabernet Sauvignon,licorice,1.41,0.122,688
+Cabernet Sauvignon,leather,1.37,0.075,421
+Cabernet Sauvignon,sage,1.36,0.026,148
+Cabernet Sauvignon,vanilla,1.2,0.136,766
+Cabernet Sauvignon,boysenberry,1.19,0.016,92
+Cabernet Sauvignon,brambleberry,1.17,0.009,48
+Cabernet Sauvignon,earth,1.16,0.123,694
+Cabernet Sauvignon,caramel,1.15,0.052,291
+Cabernet Sauvignon,meat,1.13,0.074,419
+Cabernet Sauvignon,iron,1.08,0.007,37
+Cabernet Sauvignon,dried fruit,1.06,0.053,301
+Cabernet Sauvignon,tea,1.05,0.023,129
+Cabernet Sauvignon,pepper,1.04,0.132,743
+Cabernet Sauvignon,chalk,1.02,0.015,84
+Cabernet Sauvignon,spice,1.0,0.276,1559
+Cabernet Sauvignon,cinnamon,0.98,0.04,225
+Cabernet Sauvignon,thyme,0.98,0.012,68
+Cabernet Sauvignon,violet,0.97,0.032,178
+Cabernet Sauvignon,cardamom,0.97,0.005,29
+Cabernet Sauvignon,cola,0.97,0.043,244
+Cabernet Sauvignon,red fruit,0.95,0.04,228
+Cabernet Sauvignon,toast,0.94,0.111,627
+Cabernet Sauvignon,raspberry,0.93,0.104,586
+Cabernet Sauvignon,rosemary,0.92,0.005,27
+Cabernet Sauvignon,candied fruit,0.92,0.026,149
+Cabernet Sauvignon,sandalwood,0.8,0.009,52
+Cabernet Sauvignon,lavender,0.75,0.007,39
+Cabernet Sauvignon,mushroom,0.75,0.011,60
+Cabernet Sauvignon,bread & pastry,0.73,0.014,79
+Cabernet Sauvignon,nutmeg,0.68,0.009,50
+Cabernet Sauvignon,pomegranate,0.67,0.01,56
+Cabernet Sauvignon,wood,0.67,0.044,247
+Cabernet Sauvignon,forest floor,0.6,0.006,35
+Cabernet Sauvignon,butter,0.52,0.011,63
+Cabernet Sauvignon,red berries,0.51,0.016,90
+Cabernet Sauvignon,rhubarb,0.51,0.004,23
+Cabernet Sauvignon,minerals,0.49,0.058,327
+Cabernet Sauvignon,slate,0.48,0.004,25
+Cabernet Sauvignon,sour cherry,0.48,0.005,27
+Cabernet Sauvignon,strawberry,0.47,0.025,140
+Cabernet Sauvignon,stone,0.45,0.016,90
+Cabernet Sauvignon,balsamic,0.44,0.005,26
+Cabernet Sauvignon,salt,0.42,0.011,62
+Cabernet Sauvignon,wild berries,0.38,0.006,33
+Cabernet Sauvignon,grass,0.38,0.007,37
+Cabernet Sauvignon,flowers,0.35,0.039,219
+Cabernet Sauvignon,rose,0.27,0.008,46
+Cabernet Sauvignon,nuts,0.22,0.005,28
+Cabernet Sauvignon,orange,0.14,0.009,49
+Cabernet Sauvignon,almond,0.11,0.004,25
+Cabernet Sauvignon,citrus,0.05,0.006,33
+Cabernet Sauvignon,lemon,0.05,0.005,27
+Bordeaux Red Blend,blackcurrant,5.36,0.194,648
+Bordeaux Red Blend,wood,4.08,0.267,890
+Bordeaux Red Blend,currant,3.22,0.131,438
+Bordeaux Red Blend,dark fruit,2.86,0.186,621
+Bordeaux Red Blend,cigar box,2.54,0.017,56
+Bordeaux Red Blend,blackberry,1.93,0.287,957
+Bordeaux Red Blend,red berries,1.92,0.06,199
+Bordeaux Red Blend,cassis,1.86,0.087,290
+Bordeaux Red Blend,smoke,1.78,0.148,493
+Bordeaux Red Blend,red fruit,1.66,0.071,235
+Bordeaux Red Blend,cedar,1.65,0.058,192
+Bordeaux Red Blend,chocolate,1.65,0.15,500
+Bordeaux Red Blend,pencil shavings,1.65,0.016,53
+Bordeaux Red Blend,graphite,1.54,0.025,83
+Bordeaux Red Blend,green pepper,1.5,0.015,51
+Bordeaux Red Blend,cocoa,1.48,0.029,96
+Bordeaux Red Blend,mint,1.44,0.045,150
+Bordeaux Red Blend,coffee,1.34,0.116,387
+Bordeaux Red Blend,plum,1.28,0.201,670
+Bordeaux Red Blend,eucalyptus,1.25,0.01,32
+Bordeaux Red Blend,olive,1.17,0.024,79
+Bordeaux Red Blend,spice,1.12,0.309,1031
+Bordeaux Red Blend,tobacco,1.11,0.06,201
+Bordeaux Red Blend,brambleberry,1.11,0.008,27
+Bordeaux Red Blend,blueberry,1.05,0.04,134
+Bordeaux Red Blend,redcurrant,1.04,0.021,71
+Bordeaux Red Blend,iron,1.04,0.006,21
+Bordeaux Red Blend,toast,1.01,0.119,398
+Bordeaux Red Blend,tar,1.0,0.015,51
+Bordeaux Red Blend,herbs,1.0,0.172,572
+Bordeaux Red Blend,licorice,0.97,0.084,279
+Bordeaux Red Blend,boysenberry,0.94,0.013,43
+Bordeaux Red Blend,cranberry,0.83,0.03,99
+Bordeaux Red Blend,cherry,0.82,0.184,614
+Bordeaux Red Blend,violet,0.8,0.026,87
+Bordeaux Red Blend,coconut,0.78,0.01,33
+Bordeaux Red Blend,black cherry,0.77,0.064,214
+Bordeaux Red Blend,thyme,0.73,0.009,30
+Bordeaux Red Blend,oak,0.71,0.128,426
+Bordeaux Red Blend,dried fruit,0.7,0.035,118
+Bordeaux Red Blend,leather,0.7,0.038,127
+Bordeaux Red Blend,lavender,0.65,0.006,20
+Bordeaux Red Blend,vanilla,0.64,0.073,242
+Bordeaux Red Blend,tea,0.64,0.014,46
+Bordeaux Red Blend,meat,0.61,0.04,134
+Bordeaux Red Blend,caramel,0.6,0.027,89
+Bordeaux Red Blend,pepper,0.56,0.071,236
+Bordeaux Red Blend,earth,0.55,0.059,195
+Bordeaux Red Blend,sage,0.54,0.011,35
+Bordeaux Red Blend,chalk,0.53,0.008,26
+Bordeaux Red Blend,raspberry,0.52,0.058,194
+Bordeaux Red Blend,pomegranate,0.51,0.008,25
+Bordeaux Red Blend,mushroom,0.51,0.007,24
+Bordeaux Red Blend,clove,0.44,0.02,66
+Bordeaux Red Blend,minerals,0.42,0.05,168
+Bordeaux Red Blend,cinnamon,0.4,0.016,54
+Bordeaux Red Blend,strawberry,0.38,0.02,66
+Bordeaux Red Blend,flowers,0.36,0.04,132
+Bordeaux Red Blend,cola,0.34,0.015,51
+Bordeaux Red Blend,bread & pastry,0.33,0.006,21
+Bordeaux Red Blend,stone,0.32,0.011,38
+Bordeaux Red Blend,rose,0.32,0.01,32
+Bordeaux Red Blend,candied fruit,0.21,0.006,20
+Bordeaux Red Blend,citrus,0.07,0.008,28
+Syrah,tapenade,7.59,0.009,29
+Syrah,boysenberry,5.1,0.07,225
+Syrah,olive,4.55,0.093,298
+Syrah,lavender,4.46,0.041,132
+Syrah,meat,4.39,0.288,927
+Syrah,charcoal,4.21,0.008,27
+Syrah,blueberry,3.61,0.138,444
+Syrah,tar,3.55,0.054,175
+Syrah,rosemary,3.48,0.018,58
+Syrah,mulberry,3.26,0.013,43
+Syrah,pepper,3.05,0.384,1238
+Syrah,iron,2.96,0.018,58
+Syrah,violet,2.49,0.081,261
+Syrah,coffee,2.46,0.213,687
+Syrah,bark,2.38,0.009,28
+Syrah,blackberry,2.32,0.345,1111
+Syrah,cocoa,2.14,0.042,134
+Syrah,sandalwood,2.02,0.023,75
+Syrah,chocolate,2.01,0.183,589
+Syrah,thyme,1.96,0.024,78
+Syrah,dark fruit,1.94,0.127,408
+Syrah,graphite,1.85,0.03,96
+Syrah,smoke,1.8,0.15,484
+Syrah,cigar box,1.79,0.012,38
+Syrah,licorice,1.74,0.151,487
+Syrah,cedar,1.71,0.06,192
+Syrah,leather,1.54,0.084,270
+Syrah,mint,1.54,0.048,155
+Syrah,plum,1.4,0.219,706
+Syrah,earth,1.37,0.145,468
+Syrah,cassis,1.37,0.064,206
+Syrah,currant,1.36,0.056,179
+Syrah,cola,1.34,0.06,193
+Syrah,brambleberry,1.32,0.01,31
+Syrah,raspberry,1.31,0.146,470
+Syrah,herbs,1.28,0.221,711
+Syrah,vanilla,1.27,0.144,464
+Syrah,tea,1.25,0.027,87
+Syrah,black cherry,1.23,0.103,333
+Syrah,tobacco,1.19,0.065,208
+Syrah,blackcurrant,1.18,0.043,138
+Syrah,cranberry,1.15,0.041,133
+Syrah,coconut,1.15,0.015,47
+Syrah,oak,1.14,0.207,667
+Syrah,mushroom,1.13,0.016,52
+Syrah,spice,1.12,0.308,991
+Syrah,cherry,1.11,0.248,797
+Syrah,pencil shavings,1.06,0.01,33
+Syrah,eucalyptus,1.05,0.008,26
+Syrah,caramel,1.05,0.047,151
+Syrah,red fruit,0.95,0.04,130
+Syrah,flowers,0.91,0.1,323
+Syrah,pomegranate,0.9,0.013,43
+Syrah,rhubarb,0.89,0.007,23
+Syrah,wild berries,0.88,0.014,44
+Syrah,dried fruit,0.85,0.043,138
+Syrah,white flowers,0.84,0.012,39
+Syrah,balsamic,0.83,0.009,28
+Syrah,clove,0.82,0.037,119
+Syrah,cinnamon,0.8,0.033,105
+Syrah,forest floor,0.72,0.007,24
+Syrah,salt,0.72,0.019,61
+Syrah,toast,0.67,0.079,253
+Syrah,redcurrant,0.66,0.014,44
+Syrah,bread & pastry,0.66,0.013,41
+Syrah,sage,0.66,0.013,41
+Syrah,wood,0.62,0.041,131
+Syrah,stone,0.6,0.021,69
+Syrah,red berries,0.6,0.019,60
+Syrah,nutmeg,0.59,0.008,25
+Syrah,orange,0.58,0.036,117
+Syrah,strawberry,0.55,0.029,92
+Syrah,candied fruit,0.54,0.016,50
+Syrah,chalk,0.53,0.008,25
+Syrah,minerals,0.5,0.059,190
+Syrah,rose,0.39,0.012,38
+Syrah,butter,0.37,0.008,26
+Syrah,citrus,0.17,0.02,63
+Syrah,lemon,0.06,0.006,20
+Riesling,petrol,13.57,0.056,174
+Riesling,mandarin,9.19,0.029,91
+Riesling,mirabelle,8.63,0.02,64
+Riesling,bergamot,8.52,0.012,37
+Riesling,tangerine,7.41,0.19,593
+Riesling,slate,6.75,0.062,193
+Riesling,beeswax,5.72,0.067,209
+Riesling,quince,5.55,0.028,88
+Riesling,lime,5.16,0.312,975
+Riesling,honey,4.71,0.265,830
+Riesling,stone,4.6,0.163,510
+Riesling,lemon,4.06,0.391,1222
+Riesling,orange blossom,4.02,0.018,56
+Riesling,grapefruit,3.97,0.176,552
+Riesling,botrytis,3.81,0.012,37
+Riesling,chamomile,3.75,0.013,40
+Riesling,peach,3.73,0.361,1129
+Riesling,honeysuckle,3.54,0.052,164
+Riesling,stone fruit,3.31,0.082,258
+Riesling,flint,3.18,0.032,101
+Riesling,apricot,3.05,0.143,447
+Riesling,minerals,2.94,0.35,1095
+Riesling,mango,2.8,0.045,141
+Riesling,apple,2.54,0.343,1072
+Riesling,guava,2.42,0.013,40
+Riesling,orange,2.32,0.146,458
+Riesling,flowers,2.26,0.25,781
+Riesling,tea,2.24,0.049,152
+Riesling,citrus,2.22,0.259,809
+Riesling,brambleberry,2.19,0.016,50
+Riesling,pear,2.16,0.182,570
+Riesling,white flowers,2.12,0.03,95
+Riesling,pineapple,2.09,0.095,296
+Riesling,chalk,2.08,0.03,95
+Riesling,nectarine,1.98,0.039,123
+Riesling,melon,1.96,0.096,301
+Riesling,passion fruit,1.56,0.012,38
+Riesling,tropical fruit,1.43,0.056,176
+Riesling,lemongrass,1.4,0.006,20
+Riesling,papaya,1.3,0.01,32
+Riesling,candied fruit,1.23,0.035,110
+Riesling,smoke,1.19,0.099,310
+Riesling,nuts,1.18,0.027,84
+Riesling,lees,1.18,0.012,39
+Riesling,salt,1.03,0.027,85
+Riesling,earth,1.0,0.107,334
+Riesling,gooseberry,0.91,0.006,20
+Riesling,lavender,0.9,0.008,26
+Riesling,lychee,0.89,0.007,22
+Riesling,ginger,0.82,0.008,25
+Riesling,herbs,0.7,0.121,377
+Riesling,yellow fruit,0.63,0.008,24
+Riesling,spice,0.6,0.166,518
+Riesling,caramel,0.52,0.023,73
+Riesling,bread & pastry,0.47,0.009,28
+Riesling,almond,0.45,0.018,55
+Riesling,grass,0.44,0.008,24
+Riesling,rose,0.41,0.012,39
+Riesling,currant,0.35,0.014,44
+Riesling,mint,0.32,0.01,31
+Riesling,plum,0.29,0.046,144
+Riesling,cinnamon,0.21,0.009,27
+Riesling,cherry,0.16,0.036,112
+Riesling,vanilla,0.16,0.018,55
+Riesling,dried fruit,0.14,0.007,22
+Riesling,pepper,0.12,0.016,49
+Riesling,toast,0.1,0.012,37
+Riesling,oak,0.06,0.011,34
+Sauvignon Blanc,gooseberry,18.78,0.132,375
+Sauvignon Blanc,grass,11.36,0.198,561
+Sauvignon Blanc,nettle,10.83,0.023,65
+Sauvignon Blanc,passion fruit,10.34,0.081,228
+Sauvignon Blanc,lemongrass,10.31,0.047,133
+Sauvignon Blanc,green pepper,6.0,0.061,174
+Sauvignon Blanc,grapefruit,5.88,0.261,740
+Sauvignon Blanc,kiwi,5.71,0.038,108
+Sauvignon Blanc,guava,5.16,0.027,77
+Sauvignon Blanc,lime,4.53,0.274,776
+Sauvignon Blanc,flint,4.35,0.044,125
+Sauvignon Blanc,tropical fruit,4.13,0.162,460
+Sauvignon Blanc,melon,3.69,0.181,513
+Sauvignon Blanc,papaya,3.23,0.025,72
+Sauvignon Blanc,citrus,3.09,0.36,1020
+Sauvignon Blanc,pineapple,3.03,0.137,389
+Sauvignon Blanc,mango,3.01,0.048,137
+Sauvignon Blanc,lemon,2.81,0.27,765
+Sauvignon Blanc,chalk,2.61,0.038,108
+Sauvignon Blanc,nectarine,2.54,0.05,143
+Sauvignon Blanc,stone,2.18,0.077,219
+Sauvignon Blanc,tangerine,2.1,0.054,152
+Sauvignon Blanc,orange blossom,2.06,0.009,26
+Sauvignon Blanc,lees,1.84,0.019,55
+Sauvignon Blanc,apple,1.76,0.237,671
+Sauvignon Blanc,petrol,1.72,0.007,20
+Sauvignon Blanc,banana,1.71,0.018,50
+Sauvignon Blanc,quince,1.67,0.008,24
+Sauvignon Blanc,apricot,1.64,0.077,218
+Sauvignon Blanc,minerals,1.6,0.19,539
+Sauvignon Blanc,yellow fruit,1.57,0.019,54
+Sauvignon Blanc,peach,1.52,0.147,416
+Sauvignon Blanc,stone fruit,1.46,0.036,103
+Sauvignon Blanc,orange,1.45,0.091,259
+Sauvignon Blanc,honeysuckle,1.43,0.021,60
+Sauvignon Blanc,salt,1.43,0.038,107
+Sauvignon Blanc,pear,1.43,0.121,342
+Sauvignon Blanc,herbs,1.37,0.236,669
+Sauvignon Blanc,honey,1.36,0.077,217
+Sauvignon Blanc,lychee,1.25,0.01,28
+Sauvignon Blanc,beeswax,1.24,0.014,41
+Sauvignon Blanc,dried fruit,1.2,0.06,171
+Sauvignon Blanc,thyme,0.97,0.012,34
+Sauvignon Blanc,white flowers,0.96,0.014,39
+Sauvignon Blanc,vanilla,0.91,0.103,292
+Sauvignon Blanc,ginger,0.9,0.009,25
+Sauvignon Blanc,butter,0.8,0.017,49
+Sauvignon Blanc,flowers,0.77,0.085,240
+Sauvignon Blanc,nuts,0.73,0.017,47
+Sauvignon Blanc,mint,0.57,0.018,51
+Sauvignon Blanc,oak,0.57,0.102,290
+Sauvignon Blanc,candied fruit,0.56,0.016,45
+Sauvignon Blanc,pepper,0.54,0.069,194
+Sauvignon Blanc,smoke,0.49,0.041,116
+Sauvignon Blanc,almond,0.48,0.019,53
+Sauvignon Blanc,currant,0.4,0.016,46
+Sauvignon Blanc,spice,0.39,0.107,303
+Sauvignon Blanc,wood,0.36,0.024,67
+Sauvignon Blanc,toast,0.36,0.042,120
+Sauvignon Blanc,caramel,0.25,0.011,32
+Sauvignon Blanc,plum,0.2,0.031,88
+Sauvignon Blanc,earth,0.18,0.019,55
+Sauvignon Blanc,licorice,0.1,0.009,25
+Red Blend,forest berries,2.12,0.009,24
+Red Blend,dried fruit,2.04,0.103,283
+Red Blend,tobacco,1.76,0.095,262
+Red Blend,balsamic,1.66,0.017,48
+Red Blend,green pepper,1.63,0.017,46
+Red Blend,licorice,1.62,0.14,386
+Red Blend,black cherry,1.62,0.136,373
+Red Blend,sour cherry,1.6,0.016,44
+Red Blend,cassis,1.59,0.075,205
+Red Blend,wild berries,1.57,0.024,67
+Red Blend,red berries,1.57,0.049,134
+Red Blend,coffee,1.56,0.135,372
+Red Blend,dark fruit,1.56,0.101,279
+Red Blend,brambleberry,1.55,0.011,31
+Red Blend,violet,1.54,0.05,138
+Red Blend,blackberry,1.49,0.222,611
+Red Blend,meat,1.49,0.097,268
+Red Blend,chocolate,1.44,0.131,360
+Red Blend,leather,1.42,0.077,213
+Red Blend,blueberry,1.42,0.054,149
+Red Blend,eucalyptus,1.42,0.011,30
+Red Blend,plum,1.39,0.218,599
+Red Blend,clove,1.36,0.061,168
+Red Blend,cherry,1.32,0.294,809
+Red Blend,pepper,1.28,0.161,443
+Red Blend,earth,1.27,0.135,372
+Red Blend,nutmeg,1.25,0.016,45
+Red Blend,olive,1.22,0.025,68
+Red Blend,cocoa,1.22,0.024,65
+Red Blend,spice,1.2,0.33,907
+Red Blend,mint,1.2,0.037,103
+Red Blend,graphite,1.19,0.019,53
+Red Blend,redcurrant,1.17,0.024,66
+Red Blend,red fruit,1.17,0.049,136
+Red Blend,boysenberry,1.17,0.016,44
+Red Blend,tar,1.14,0.017,48
+Red Blend,cedar,1.13,0.039,108
+Red Blend,herbs,1.13,0.194,534
+Red Blend,coconut,1.09,0.014,38
+Red Blend,cinnamon,1.08,0.044,121
+Red Blend,raspberry,1.06,0.118,324
+Red Blend,sage,1.05,0.02,56
+Red Blend,forest floor,1.05,0.011,30
+Red Blend,lavender,1.03,0.009,26
+Red Blend,blackcurrant,1.01,0.037,101
+Red Blend,smoke,1.0,0.083,228
+Red Blend,strawberry,0.94,0.049,136
+Red Blend,cola,0.93,0.041,114
+Red Blend,oak,0.92,0.167,460
+Red Blend,currant,0.92,0.037,103
+Red Blend,pomegranate,0.89,0.013,36
+Red Blend,vanilla,0.88,0.1,274
+Red Blend,mushroom,0.84,0.012,33
+Red Blend,toast,0.81,0.095,261
+Red Blend,candied fruit,0.78,0.022,61
+Red Blend,chalk,0.77,0.011,31
+Red Blend,flowers,0.75,0.083,228
+Red Blend,tea,0.72,0.016,43
+Red Blend,cranberry,0.71,0.025,70
+Red Blend,wood,0.64,0.042,116
+Red Blend,sandalwood,0.63,0.007,20
+Red Blend,salt,0.61,0.016,44
+Red Blend,thyme,0.59,0.007,20
+Red Blend,stone,0.58,0.021,57
+Red Blend,rose,0.57,0.017,47
+Red Blend,caramel,0.56,0.025,69
+Red Blend,minerals,0.5,0.06,164
+Red Blend,almond,0.5,0.019,53
+Red Blend,orange,0.45,0.028,78
+Red Blend,nuts,0.4,0.009,25
+Red Blend,bread & pastry,0.4,0.008,21
+Red Blend,citrus,0.07,0.008,23
