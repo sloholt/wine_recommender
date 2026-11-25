@@ -62,7 +62,7 @@ from scipy import sparse
 from sklearn.preprocessing import normalize
 
 PROFILE_DIR = Path("artifacts") / "flavor_profiles"
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 
 SENSORY_COLS = ["body", "acidity", "tannin", "sweetness", "finish"]
 # Relative weight of each block in the final vector (each block has length ~1).
@@ -76,6 +76,9 @@ STYLE_PENALTY = 0.15
 # Share of similar() results reserved for wines from the same region or sharing a
 # grape with the query; the rest are taste matches from other regions and grapes.
 LOCAL_SHARE = 0.4
+# Share of similarity from review words when both wines have reviews (the rest is
+# the flavor profile). Equal weights scored best in app/evaluate_vectors.py.
+REVIEW_WEIGHT = 0.5
 GRAPE_OVERLAP = 0.5  # min share of the two wines' combined grapes they must have in common
 STILL = "Still"  # the database stores still table wine as style NULL
 STYLES = ("Still", "Sparkling", "Dessert", "Fortified")
@@ -228,11 +231,17 @@ class FlavorProfiles:
     groups: pd.DataFrame  # level, key, n_wines; row i <-> group_vectors[i]
     group_vectors: np.ndarray
     info: dict = field(default_factory=dict)
+    # Review-word TF-IDF per wine (empty rows: no reviews); row i <-> vectors[i].
+    reviews: Optional[sparse.csr_matrix] = None
     # Only kept in memory after a build (used for the lift table), not saved.
     aroma_presence: Optional[sparse.csr_matrix] = None
 
     def __post_init__(self):
         self._row = pd.Series(np.arange(len(self.meta)), index=self.meta["wine_id"])
+        if self.reviews is None:
+            self.reviews = sparse.csr_matrix((len(self.meta), 1), dtype=np.float32)
+        self._has_review = np.diff(self.reviews.indptr) > 0
+        self._reviews_by_col = self.reviews.tocsc()
         self._n_aroma = sum(f.startswith("aroma:") for f in self.feature_names)
         self._aroma_names = np.array(
             [f.split(":", 1)[1] for f in self.feature_names[: self._n_aroma]]
@@ -348,6 +357,7 @@ class FlavorProfiles:
         style_penalty: float = STYLE_PENALTY,
         same_style_only: bool = False,
         own_profiles_only: bool = True,
+        review_weight: float = REVIEW_WEIGHT,
         local_share: float = LOCAL_SHARE,
         region: Optional[str] = None,
         grapes: Optional[str] = None,
@@ -367,6 +377,9 @@ class FlavorProfiles:
         "Similar taste"). If one kind runs short, the other fills its slots.
         local_share=0 ranks every wine by taste alone; 1 keeps only local wines.
 
+        review_weight       share of the score from review-word similarity when
+                            the query wine has reviews (default 0.5; 0 = flavor
+                            profile only). Vector queries use the flavor profile.
         region, grapes      what "local" means for a ``vector`` query (a scanned
                             label): e.g. region="Provence", grapes="Grenache, Cinsault".
                             Taken from the wine itself for a ``wine_id`` query.
@@ -429,7 +442,13 @@ class FlavorProfiles:
         if not mask.any():
             return pd.DataFrame(columns=RESULT_COLS)
         # Scoring every wine is one fast matrix-vector product; filter afterwards.
-        sims = np.where(mask, self.vectors @ q, -np.inf)
+        sims = self.vectors @ q
+        if wine_id is not None and review_weight > 0 and self._has_review[qi]:
+            # Both wines reviewed: average of flavor and review-word similarity.
+            # A candidate without reviews counts 0 for the review part, so the
+            # query's evidence is never matched against a wine that has none.
+            sims = (1 - review_weight) * sims + review_weight * self._review_sims(qi)
+        sims = np.where(mask, sims, -np.inf)
         rank_score = sims - style_penalty * other_style  # ranking only
 
         # Local = same region area (and country), or shares at least one grape.
@@ -487,6 +506,12 @@ class FlavorProfiles:
         return out[RESULT_COLS].reset_index(drop=True)
 
     # ---- similarity helpers
+    def _review_sims(self, row: int) -> np.ndarray:
+        """Cosine similarity of every wine's review words to wine ``row``'s (0 if none)."""
+        q = self.reviews[row]
+        cols = self._reviews_by_col[:, q.indices]  # only the query's words matter
+        return np.asarray(cols @ q.data).ravel()
+
     def _grape_ids(self, grapes: Optional[str]) -> list:
         """Known grape ids in a label's variety text ('Grenache-Cinsault')."""
         ids = [self._grape_id.get(g) for g in _split_grapes(grapes)]
@@ -589,6 +614,7 @@ class FlavorProfiles:
         out_dir.mkdir(parents=True, exist_ok=True)
         np.save(out_dir / "vectors.npy", self.vectors)
         np.save(out_dir / "group_vectors.npy", self.group_vectors)
+        sparse.save_npz(out_dir / "reviews.npz", self.reviews)
         self.meta.to_parquet(out_dir / "meta.parquet", index=False)
         self.groups.to_parquet(out_dir / "groups.parquet", index=False)
         (out_dir / "info.json").write_text(
@@ -614,6 +640,7 @@ class FlavorProfiles:
             feature_names=feature_names,
             groups=pd.read_parquet(in_dir / "groups.parquet"),
             group_vectors=np.load(in_dir / "group_vectors.npy"),
+            reviews=sparse.load_npz(in_dir / "reviews.npz").tocsr(),
             info=info,
         )
 
@@ -623,13 +650,18 @@ def build_profiles(
     features: Optional[pd.DataFrame] = None,
     aromas: Optional[pd.DataFrame] = None,
     min_own_aromas: int = MIN_OWN_AROMAS,
+    reviews: Optional[pd.DataFrame] = None,
+    with_reviews: bool = True,
 ) -> FlavorProfiles:
-    """Build profiles for every wine from repository.get_wine_features() / get_aromas()."""
-    if features is None or aromas is None:
+    """Build profiles for every wine from repository.get_wine_features() /
+    get_aromas() / get_reviews(). with_reviews=False skips the review-word block."""
+    if features is None or aromas is None or (with_reviews and reviews is None):
         from database import repository as repo
 
         features = repo.get_wine_features() if features is None else features
         aromas = repo.get_aromas() if aromas is None else aromas
+        if with_reviews and reviews is None:
+            reviews = repo.get_reviews()[["wine_id", "review"]]
 
     meta = features.reset_index(drop=True)
     meta["style_group"] = meta["style"].fillna(STILL)  # NULL style = still table wine
@@ -735,13 +767,22 @@ def build_profiles(
         meta["winery"].map(_norm_text) + "|" + meta["name"].map(_norm_text)
     )
 
+    # Review-word block: TF-IDF of each wine's reviews, grape and place names hidden.
+    review_vectors = None
+    if with_reviews:
+        from app.review_text import review_matrix
+
+        review_vectors, _ = review_matrix(out_meta, reviews, aroma_names)
+
     info = {
         "format_version": FORMAT_VERSION,
         "built_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "n_wines": n,
         "n_own_profiles": n_own,
+        "n_with_reviews": int((np.diff(review_vectors.indptr) > 0).sum()) if with_reviews else 0,
         "profile_sources": pd.Series(profile_source).value_counts().to_dict(),
         "weights": WEIGHTS,
+        "review_weight": REVIEW_WEIGHT,
         "min_own_aromas": min_own_aromas,
         "shrink": SHRINK,
         "min_group": MIN_GROUP,
@@ -754,6 +795,7 @@ def build_profiles(
         groups=groups,
         group_vectors=group_vectors,
         info=info,
+        reviews=review_vectors,
         aroma_presence=A,
     )
 

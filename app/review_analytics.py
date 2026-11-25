@@ -29,49 +29,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import LatentDirichletAllocation
-from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, CountVectorizer
+from sklearn.feature_extraction.text import CountVectorizer
 
 from app.flavor_profiles import PROFILE_DIR, build_profiles
+from app.review_text import STOP_WORDS
 from database import repository as repo
 from database.connection import DATABASE_PATH
 
 ARTIFACT_DIR = Path("artifacts")
 SEED = 42
 
-# Words that appear in nearly every review and carry no flavor information.
-WINE_STOP = {
-    "wine",
-    "wines",
-    "flavors",
-    "flavor",
-    "aromas",
-    "aroma",
-    "palate",
-    "finish",
-    "nose",
-    "notes",
-    "drink",
-    "drinks",
-    "shows",
-    "offers",
-    "bottle",
-    "glass",
-    "vineyard",
-    "vintage",
-    "years",
-    "year",
-    "made",
-    "now",
-    "through",
-    "well",
-    "also",
-    "just",
-    "hint",
-    "hints",
-    "touch",
-    "feel",
-}
-STOP_WORDS = list(ENGLISH_STOP_WORDS | WINE_STOP)
 
 N_TOP_VARIETIES = 8
 MIN_SUPPORT = 20  # aroma must appear in at least this many wines of the grape

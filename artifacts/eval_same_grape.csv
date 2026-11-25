@@ -1,9 +1,9 @@
 method,same_grape_at_10,same_grape_at_10_other_regions
 Random pick (baseline),0.041,0.041
 "Metadata: country, region, price, score",0.342,0.118
-Review words (grape names hidden),0.234,0.199
-Review words (grape + place names hidden),0.225,0.195
-Review words + metadata,0.42,0.261
+Review words (grape names hidden),0.24,0.204
+Review words (grape + place names hidden),0.232,0.201
+Review words + metadata,0.424,0.265
 Flavor profiles (this project),0.223,0.203
-Flavor profiles + review words,0.259,0.233
+Flavor profiles + review words,0.26,0.233
 Flavor profiles as saved (leaks grape),0.298,0.268

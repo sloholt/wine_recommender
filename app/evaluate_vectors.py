@@ -22,9 +22,7 @@ Run from the project folder (after python -m app.review_analytics):
 from __future__ import annotations
 
 import argparse
-import re
 import sys
-import unicodedata
 from pathlib import Path
 
 import matplotlib
@@ -38,43 +36,15 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, normalize
 
 from app.flavor_profiles import PROFILE_DIR, FlavorProfiles
-from app.review_analytics import STOP_WORDS
+from app.review_text import TFIDF_PARAMS, ascii_lower, hide_words, words_to_hide
 from database import repository as repo
 
 ARTIFACT_DIR = Path("artifacts")
 EVAL_N, K_EVAL, MIN_VARIETY, SEED = 2000, 10, 50, 42
-GENERIC = {"red", "white", "blend", "rose", "sparkling", "de", "la", "du", "di", "del",
-           "valley", "county", "coast", "hills", "river", "mountain", "district", "vino"}
 
 # Chart colors (reference palette): method bars vs. baselines, ink, surface.
 VECTOR_COLOR, BASELINE_COLOR = "#2a78d6", "#c3c2b7"
 INK, INK_2, MUTED, SURFACE = "#0b0b0b", "#52514e", "#898781", "#fcfcfb"
-
-
-def _ascii(text: str) -> str:
-    t = unicodedata.normalize("NFKD", text or "")
-    return "".join(c for c in t if not unicodedata.combining(c)).lower()
-
-
-def _words(values) -> set:
-    """Distinctive words (> 3 letters, not generic) of names such as grapes or regions."""
-    out = set()
-    for v in values:
-        if isinstance(v, str):
-            out.update(w for w in re.findall(r"[a-z]+", _ascii(v)) if len(w) > 3 and w not in GENERIC)
-    return out
-
-
-def _masked(texts: pd.Series, hide: set) -> list:
-    word = re.compile(r"[a-z]+")
-    return [word.sub(lambda m: " " if m.group() in hide else m.group(), _ascii(t)) for t in texts]
-
-
-def _tfidf(docs: list) -> sparse.csr_matrix:
-    return TfidfVectorizer(
-        stop_words=STOP_WORDS, ngram_range=(1, 2), min_df=3, max_df=0.5,
-        max_features=30000, sublinear_tf=True, token_pattern=r"(?u)\b[a-zA-Z][a-zA-Z]+\b",
-    ).fit_transform(docs)
 
 
 def _hstack_normalized(*blocks) -> sparse.csr_matrix:
@@ -90,7 +60,7 @@ def _vectors_without_grape_fill(wine_ids: pd.Series) -> np.ndarray:
     saved = fpm.LEVELS
     fpm.LEVELS = saved[:1]  # [("color", ["color", "style_group"])]
     try:
-        built = fpm.build_profiles()
+        built = fpm.build_profiles(with_reviews=False)
     finally:
         fpm.LEVELS = saved
     row_of = pd.Series(np.arange(len(built.meta)), index=built.meta["wine_id"])
@@ -137,18 +107,16 @@ def main(argv=None):
     print(f"Test wines: {len(eval_rows):,} from {len(common)} grapes with >= {MIN_VARIETY} wines")
 
     variety = pool["variety"].to_numpy()
-    winery = pool["winery"].map(_ascii).to_numpy()
+    winery = pool["winery"].map(ascii_lower).to_numpy()
     region = pool["region_key"].replace("", np.nan).fillna(pool["wine_id"].astype(str)).to_numpy()
 
-    # Words to hide from review text.
-    grape_words = _words(pool["variety"]) | _words(
-        g for gs in pool["grapes"].dropna() for g in gs.split("|")
-    )
-    flavor_words = _words(f.split(":", 1)[1] for f in fp.feature_names if f.startswith("aroma:"))
-    place_words = (_words(meta["region"]) | _words(meta["country"])) - flavor_words - grape_words
+    # Words to hide from review text: grape names; grape + place names.
+    flavor_terms = [f.split(":", 1)[1] for f in fp.feature_names if f.startswith("aroma:")]
+    hide_all = words_to_hide(meta, flavor_terms)
+    hide_grapes = words_to_hide(meta.assign(region=None, country=None), flavor_terms)
     print("Fitting review TF-IDF (grape names hidden, then grape + place names hidden)...")
-    X_rev = _tfidf(_masked(pool["review"], grape_words))
-    X_rev_noplace = _tfidf(_masked(pool["review"], grape_words | place_words))
+    X_rev = TfidfVectorizer(**TFIDF_PARAMS).fit_transform(hide_words(pool["review"], hide_grapes))
+    X_rev_noplace = TfidfVectorizer(**TFIDF_PARAMS).fit_transform(hide_words(pool["review"], hide_all))
 
     # Metadata without the grape: country, region, price, critic score.
     num = pd.DataFrame({"price": np.log1p(pool["price_usd"]), "score": pool["critic_score"]})
